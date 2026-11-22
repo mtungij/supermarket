@@ -8,9 +8,11 @@
  */
 
 import { posScanner, printReceipt } from './pos/scanner';
+import { posSearch } from './pos/search';
 import './responsive-tables';
 
 window.posScanner = posScanner;
+window.posSearch = posSearch;
 window.printReceipt = printReceipt;
 
 const THEME_KEY = 'theme';

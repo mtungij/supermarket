@@ -39,6 +39,56 @@ not marked *sell* are refused. The resolved unit and **server-side price**
 are shown. Search covers name, SKU and exact barcode. Repeated scans of the
 same product and unit increase that line's quantity.
 
+### Product search (products without barcodes)
+
+The "Search by name, SKU or barcode" box sits under the scan input. It is separate from the scanner and works alongside it.
+
+**Matching** (`PosCatalog::searchSellable`):
+- Live, debounced by 250 ms, from 2 characters.
+- Partial and case-insensitive.
+- Every word typed must appear in the product name, so "soap family" finds FAMILY MEDICATED SOAP.
+- SKUs match on any part of the code; barcodes match from the start of the code.
+
+**Ranking** (at most 12 results):
+1. Exact barcode or SKU.
+2. Name starts with the search text.
+3. A word in the name starts with it.
+4. Anything else, then alphabetical.
+
+**Each result shows:**
+- name, SKU and barcode (if any);
+- the price of the default selling unit, from the server (effective-dated, branch-aware);
+- the quantity available at the register's **selling location only**;
+- a status: In stock, Out of stock or Not for sale.
+
+**What the browser sees:**
+- Only active products of the current company appear.
+- Rows carry public UUIDs only, no internal IDs.
+- The catalogue is never sent to the browser.
+
+**Rendering and stale results:**
+- `Terminal::searchProducts()` is `#[Renderless]`, so typing never re-renders the POS.
+- Each request carries a sequence number; an older, slower response is discarded.
+
+**Keyboard and touch:**
+- ↑/↓ move the highlight. It starts on the first in-stock result.
+- Enter adds the highlighted result, waiting for a pending search if needed.
+- Esc closes the list.
+- Tap or click adds directly.
+
+**Adding a product** (`Terminal::addProduct(uuid)`):
+- The product is re-resolved through the tenant scope, so another company's UUID is "not found".
+- Inactive products and products with no sellable unit are refused.
+- The default sellable unit is used, base unit first.
+- Adds quantity 1, or +1 if the product is already in the cart.
+- The same stock check as scanning applies.
+- **On success:** the search clears, the list closes and focus returns to the scan input.
+- **Out of stock:** nothing is added, and the reason is shown. Stock in Receiving Area or other non-selling locations is never sold. POS never sells beyond sellable stock, whatever the company's negative-stock setting.
+
+**Scanner compatibility:**
+- When the picked result is an **exact** barcode or SKU, for example when the scanner fires while the search box has focus, it is routed through the scanner's own queue (`pos-scan` event → `scan()`). Packaging barcodes therefore still add the carton or crate unit, and nothing is added twice.
+- Keystrokes typed with nothing focused still go to the scan input.
+
 ### Cart
 
 Each line shows the name, SKU, barcode, unit (any sellable unit, using the

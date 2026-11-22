@@ -78,7 +78,11 @@ class PurchaseOrderForm extends Component
         return [
             'product_id' => $product->id,
             'product_unit_id' => $unit->id,
-            'unit_cost' => Decimal::trim(Decimal::round(Decimal::mul((string) $product->purchase_cost, (string) $unit->factor), Decimal::COST)),
+            // Latest ACTUAL cost (from posted receipts); before the first receipt
+            // the optional reference buying price is only a default to edit.
+            'unit_cost' => Decimal::trim(Decimal::round(Decimal::mul(
+                Decimal::isPositive((string) $product->purchase_cost) ? (string) $product->purchase_cost : (string) ($product->reference_buying_price ?? '0'),
+                (string) $unit->factor), Decimal::COST)),
             'discount_amount' => '0',
             'tax_rate' => Decimal::trim($product->tax_class->defaultRate()),
         ];

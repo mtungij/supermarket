@@ -53,6 +53,7 @@ list shows product counts.
 | tax class | `standard` (VAT, default 18% via `INVENTORY_VAT_RATE`), `zero_rated`, `exempt` |
 | purchase_cost | Latest purchase cost per base unit (4 dp). Updated by each posted GRN. Informational only |
 | selling_price | Default company-wide price per base unit (2 dp). See *Pricing* |
+| reference_buying_price | Optional reference buying price (4 dp, nullable). Only the default unit cost on new purchase-order lines before the first receipt; never used for stock value, adjustments or profit |
 | min_stock_level, reorder_level | Base units. Drive low-stock alerts |
 | track_batches, track_expiry | Lot and expiry tracking. Cannot be switched once stock movements exist |
 | image | Optional. See *Images* |
@@ -60,6 +61,47 @@ list shows product counts.
 
 The base unit and product type **cannot change once stock movements or
 purchase lines exist**.
+
+## One-step registration (Add product)
+
+`/catalogue/products/create` (`App\Livewire\Catalogue\ProductForm`) registers an ordinary product on one screen:
+
+**Product name + Category + Unit + Selling price (+ optional barcode) → Save → ready for POS.**
+
+### The form
+- **Essentials:**
+  - Product details: name, barcode (optional; a scanner's Enter moves to the next field and never submits), SKU (optional; generated if empty), category, brand.
+  - Unit and price: product type (default Standard), unit (default Piece; switches to Kilogram when the type changes to Weighed), selling price, reference buying price, tax type.
+  - The tax type defaults to the company setting `default_tax_class`, falling back to Standard.
+- **Quick add:** "+ New category" and "+ New brand" add an entry without leaving the form. They need `categories.manage` / `brands.manage`, and duplicate names are refused.
+- **Advanced settings** (collapsed by default):
+  - barcode type, additional barcodes, and an explicit "create an internal barcode for me" option;
+  - cartons and packs: unit, factor, barcode and optional price;
+  - minimum stock, reorder level, batch and expiry tracking, description, image.
+
+### What Save writes
+`ProductService::create()` writes everything in **one transaction**, so if anything fails, nothing is saved:
+- the product and its base unit (factor 1, purchasable and sellable);
+- the primary barcode (`BarcodeService`, unique per company);
+- extra barcodes and packaging units (`UnitConversionService`, so g/ml/l factors are derived and wrong factors refused; packaging barcodes are linked to their unit);
+- the initial selling price through `PriceService::setPrice()`. That creates a company-wide, base-unit price-history record (note "Initial price") and syncs `products.selling_price`, so the product immediately shows the right price in Product Details, Barcode Lookup, POS search and POS scanning.
+
+No stock, GRN, supplier invoice or cost is created. Stock still comes only from goods receipts and the other inventory workflows.
+
+### Permissions
+- Users without `products.prices.manage` (e.g. Store keeper) can register products, but the price field is disabled.
+- Such a product has no price, and the POS refuses to sell any product whose price is 0 ("has no selling price yet").
+
+### Saving
+- **Save product** opens Product Details.
+- **Save & add another** keeps category, brand, unit, type and tax, clears everything else and puts the cursor back in Product name.
+- A per-form idempotency key (cache lock) makes a double-clicked Save create one product.
+
+### Editing (same layout)
+- Name, category, brand, SKU, tax, the reference buying price and stock settings can be changed.
+- A changed selling price is written as a **new** effective-dated price record; history and sale snapshots are kept.
+- A first barcode can be added to a product that has none. Existing barcodes, units and packaging are managed on Product Details, where changes that would affect past documents are checked.
+- The product type and base unit are locked once stock or purchase records exist.
 
 ## Barcodes
 

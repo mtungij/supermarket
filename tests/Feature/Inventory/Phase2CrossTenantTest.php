@@ -92,8 +92,8 @@ class Phase2CrossTenantTest extends TestCase
 
         // Product with B's category uuid.
         Livewire::test(ProductForm::class)
-            ->set('name', 'Smuggled')->set('category', $bCategory->uuid)->call('save')
-            ->assertHasErrors('category_id');
+            ->set('name', 'Smuggled')->set('category', $bCategory->uuid)->set('sellingPrice', '1000')->call('save')
+            ->assertHasErrors('category');
         $this->assertSame(0, Product::forCompany($f['a'])->count());
 
         // Purchase order with B's supplier and B's product id.

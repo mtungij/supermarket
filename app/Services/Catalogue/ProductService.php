@@ -18,12 +18,15 @@ use App\Models\User;
 use App\Services\Support\SubscriptionGuard;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
     public function __construct(
         private readonly SubscriptionGuard $subscription,
         private readonly BarcodeService $barcodes,
+        private readonly PriceService $prices,
+        private readonly UnitConversionService $conversions,
     ) {}
 
     /**
@@ -31,8 +34,17 @@ class ProductService
      *   name: string, sku?: ?string, description?: ?string, category_id: int, brand_id?: ?int,
      *   base_unit_id: int, product_type: string, tax_class: string, purchase_cost?: ?string,
      *   selling_price?: ?string, min_stock_level?: ?string, reorder_level?: ?string,
-     *   track_expiry?: bool, track_batches?: bool, barcode?: ?string, barcode_type?: ?string
+     *   track_expiry?: bool, track_batches?: bool, barcode?: ?string, barcode_type?: ?string,
+     *   reference_buying_price?: ?string, initial_price?: ?string, generate_barcode?: bool,
+     *   extra_barcodes?: list<string>,
+     *   packaging?: list<array{unit_id: int, factor?: ?string, barcode?: ?string, price?: ?string, can_purchase?: bool, can_sell?: bool}>
      * }  $data  Validated input. Related ids are re-checked against the company.
+     *
+     * One-step registration: product, base unit, barcodes, packaging units
+     * and the initial selling price are written in ONE transaction, so a
+     * failure anywhere leaves nothing behind. The initial price goes through
+     * PriceService::setPrice() (price-history record + permission check);
+     * no stock, GRN or cost is ever created here.
      */
     public function create(Company $company, array $data, User $actor): Product
     {
@@ -54,6 +66,7 @@ class ProductService
                 'product_type' => $type,
                 'purchase_cost' => $this->money($data['purchase_cost'] ?? '0', Decimal::COST, 'purchase_cost'),
                 'selling_price' => $this->money($data['selling_price'] ?? '0', Decimal::MONEY, 'selling_price'),
+                'reference_buying_price' => $this->referencePrice($data, $product),
                 'is_active' => true,
                 'created_by' => $actor->id,
                 'updated_by' => $actor->id,
@@ -67,10 +80,76 @@ class ProductService
 
             if (filled($data['barcode'] ?? null)) {
                 $this->barcodes->add($product, $data['barcode'], BarcodeType::tryFrom($data['barcode_type'] ?? '') ?? BarcodeType::Manufacturer, $base, true);
+            } elseif ($data['generate_barcode'] ?? false) {
+                $this->barcodes->generateInternal($product, $base);    // only on explicit request
             }
 
-            return $product;
+            foreach (array_values($data['extra_barcodes'] ?? []) as $i => $code) {
+                if (filled($code)) {
+                    $this->prefixed("extra_barcodes.{$i}", fn () => $this->barcodes->add($product, $code, BarcodeType::Manufacturer, $base, false));
+                }
+            }
+
+            if (filled($data['initial_price'] ?? null)) {
+                $this->prefixed('initial_price', fn () => $this->prices->setPrice($product, $base, $this->money($data['initial_price'], Decimal::MONEY, 'initial_price'), null, $actor, notes: __('Initial price')));
+            }
+
+            foreach (array_values($data['packaging'] ?? []) as $i => $pack) {
+                $this->addPackaging($company, $product->fresh('baseUnit'), $pack, $actor, "packaging.{$i}");
+            }
+
+            return $product->fresh();
         });
+    }
+
+    /** Packaging / extra unit at registration: conversion, optional barcode and price. */
+    private function addPackaging(Company $company, Product $product, array $pack, User $actor, string $field): void
+    {
+        $unit = Unit::forCompany($company)->where('is_active', true)->find($pack['unit_id'] ?? 0)
+            ?? throw BusinessRuleException::make("{$field}.unit", __('Select a valid unit.'));
+
+        $productUnit = $this->prefixed($field, fn () => $this->conversions->setUnit(
+            $product, $unit, filled($pack['factor'] ?? null) ? (string) $pack['factor'] : null,
+            (bool) ($pack['can_purchase'] ?? true), (bool) ($pack['can_sell'] ?? true),
+        ));
+
+        if (filled($pack['barcode'] ?? null)) {
+            $this->prefixed("{$field}.barcode", fn () => $this->barcodes->add($product, $pack['barcode'], BarcodeType::Packaging, $productUnit, false));
+        }
+
+        if (filled($pack['price'] ?? null)) {
+            $this->prefixed("{$field}.price", fn () => $this->prices->setPrice($product, $productUnit, $this->money($pack['price'], Decimal::MONEY, 'price'), null, $actor, notes: __('Initial price')));
+        }
+    }
+
+    /**
+     * Change the company-wide base-unit selling price from the product form.
+     * Goes through PriceService (new effective-dated record, history kept);
+     * a no-op when the price is unchanged.
+     */
+    public function changeBasePrice(Product $product, string $price, User $actor): void
+    {
+        $price = $this->money($price, Decimal::MONEY, 'initial_price');
+        $base = ProductUnit::forCompany($product->company_id)->where('product_id', $product->id)->where('is_base', true)->firstOrFail();
+
+        if (Decimal::cmp($this->prices->resolve($product, $base)->price, $price) !== 0) {
+            $this->prefixed('initial_price', fn () => $this->prices->setPrice($product, $base, $price, null, $actor));
+        }
+    }
+
+    /**
+     * Run $callback and re-key its validation errors under $prefix
+     * (e.g. "barcode" -> "packaging.0.barcode") so the form shows each
+     * message next to the right field.
+     */
+    private function prefixed(string $prefix, callable $callback): mixed
+    {
+        try {
+            return $callback();
+        } catch (ValidationException $e) {
+            $messages = collect($e->errors())->flatten()->all();
+            throw ValidationException::withMessages([$prefix => $messages]);
+        }
     }
 
     public function update(Product $product, array $data, User $actor): Product
@@ -107,6 +186,7 @@ class ProductService
                 'brand_id' => $brand?->id,
                 'base_unit_id' => $baseUnit->id,
                 'product_type' => $type,
+                'reference_buying_price' => $this->referencePrice($data, $product),
                 'updated_by' => $actor->id,
             ])->save();
 
@@ -136,6 +216,15 @@ class ProductService
             'track_expiry' => (bool) ($data['track_expiry'] ?? false),
             'track_batches' => (bool) ($data['track_batches'] ?? false),
         ];
+    }
+
+    private function referencePrice(array $data, Product $product): ?string
+    {
+        if (! array_key_exists('reference_buying_price', $data)) {
+            return $product->reference_buying_price;
+        }
+
+        return filled($data['reference_buying_price']) ? $this->money($data['reference_buying_price'], Decimal::COST, 'reference_buying_price') : null;
     }
 
     /** @return array{0: Category, 1: ?Brand, 2: Unit} */

@@ -27,6 +27,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\Renderless;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -60,8 +61,6 @@ class Terminal extends Component
 
     /** @var array<string, array{product_id: int, product_unit_id: int, quantity: string, discount: string, barcode: ?string}> */
     public array $cart = [];
-
-    public string $search = '';
 
     public string $customerSearch = '';
 
@@ -152,26 +151,59 @@ class Terminal extends Component
         }
     }
 
-    public function addProduct(int $productId, PosCatalog $catalog): void
+    /**
+     * Live product search for products without (or with unreadable)
+     * barcodes. Renderless: returns display rows to the Alpine search box
+     * without re-rendering the POS. Results never decide what is sold;
+     * addProduct() re-resolves the product, unit, price and stock.
+     *
+     * @return array{term: string, results: list<array<string, mixed>>}
+     */
+    #[Renderless]
+    public function searchProducts(string $term, PosCatalog $catalog): array
     {
-        $product = Product::query()->findOrFail($productId);
-        $unit = $catalog->units($product)->first();
+        $term = mb_substr(trim($term), 0, 64);
+
+        if (RateLimiter::tooManyAttempts('pos-search:'.auth()->id(), 600)) {
+            return ['term' => $term, 'results' => []];
+        }
+        RateLimiter::hit('pos-search:'.auth()->id(), 60);
+
+        return ['term' => $term, 'results' => $catalog->searchSellable($this->company(), $this->currentBranch(), $this->sellingLocation(), $term)];
+    }
+
+    /**
+     * Add a search result (by public UUID) with quantity 1, or +1 when it is
+     * already in the cart. The product is resolved through the tenant scope,
+     * so another company's product is simply "not found".
+     */
+    public function addProduct(string $uuid, PosCatalog $catalog): bool
+    {
+        $this->resetErrorBag('scan');
+        $this->notice = '';
+        $product = Product::query()->where('uuid', $uuid)->first();
+        $added = false;
 
         try {
+            if ($product === null) {
+                throw BusinessRuleException::make('scan', __('Product not found.'));
+            }
+            $unit = $catalog->units($product)->first();
             if ($unit === null) {
                 throw BusinessRuleException::make('scan', __(':product cannot be sold in this unit.', ['product' => $product->name]));
             }
             $item = $catalog->item($product, $unit, $this->currentBranch());
-            $this->addToCart($item->product, $item->unit, null);
-            $this->search = '';
+            $added = $this->addToCart($item->product, $item->unit, null);
         } catch (ValidationException $e) {
             $this->addError('scan', collect($e->errors())->flatten()->first());
         }
 
-        $this->dispatch('pos-focus');
+        // On success the search box hands focus back to the scanner itself;
+        // on failure focus stays in the search so the cashier can pick again.
+        return $added;
     }
 
-    private function addToCart(Product $product, ProductUnit $unit, ?string $barcode): void
+    private function addToCart(Product $product, ProductUnit $unit, ?string $barcode): bool
     {
         $key = $product->id.'-'.$unit->id;
         $next = isset($this->cart[$key]) ? Decimal::trim(Decimal::add($this->validQty($this->cart[$key]['quantity']), '1', Decimal::QTY)) : '1';
@@ -179,7 +211,7 @@ class Terminal extends Component
         if (($warning = $this->stockProblem($product, $unit, $next)) !== null) {
             $this->addError('scan', $warning);
 
-            return;
+            return false;
         }
 
         if (isset($this->cart[$key])) {
@@ -192,6 +224,8 @@ class Terminal extends Component
 
         $this->notice = __(':product × :qty', ['product' => $product->name, 'qty' => $next]);
         $this->paying = false;
+
+        return true;
     }
 
     public function increment(string $key): void
@@ -283,6 +317,10 @@ class Terminal extends Component
         $other = collect($this->cart)->filter(fn ($l, $k) => $l['product_id'] === $product->id && $k !== $product->id.'-'.$unit->id)
             ->reduce(fn ($c, $l) => Decimal::add($c, Decimal::mul($this->validQty($l['quantity']), (string) ProductUnit::query()->whereKey($l['product_unit_id'])->value('factor'))), '0');
         $needed = Decimal::add($other, Decimal::mul($quantity, (string) $unit->factor));
+
+        if (! Decimal::isPositive($available)) {
+            return __(':product is out of stock at :location. Stock in other locations is not sold until it is transferred here.', ['product' => $product->name, 'location' => __($location->name)]);
+        }
 
         return Decimal::cmp($needed, $available) > 0
             ? __('Only :available :unit of :product in :location.', ['available' => Decimal::trim($available), 'unit' => __($product->baseUnit->name), 'product' => $product->name, 'location' => __($location->name)])
@@ -504,7 +542,6 @@ class Terminal extends Component
             'devices' => $registers->devices($branch),
             'location' => $this->sellingLocation(),
             'summary' => $summary,
-            'results' => app(PosCatalog::class)->search($this->company(), $this->search, 8),
             'methods' => PaymentMethod::query()->where('is_active', true)
                 ->when($this->exchangeUuid === '', fn ($q) => $q->where('type', '!=', PaymentMethodType::ExchangeCredit->value))
                 ->orderBy('sort_order')->get()->keyBy('uuid'),

@@ -52,16 +52,55 @@
                         @if ($notice !== '' && ! $errors->has('scan')) <p class="text-brand-700 dark:text-brand-100">{{ $notice }}</p> @endif
                         <p x-show="busy" x-cloak class="text-xs text-slate-500">{{ __('Looking up…') }}</p>
                     </div>
-                    <div class="relative">
+                    {{-- Product search for items without (readable) barcodes: resources/js/pos/search.js.
+                         wire:ignore: Livewire never re-renders this box while the cashier types. --}}
+                    <div class="relative" wire:ignore x-data="posSearch()" x-on:click.outside="close()" x-on:keydown.escape.window="close()" data-pos-search>
                         <label for="pos-search" class="sr-only">{{ __('Search products') }}</label>
-                        <input id="pos-search" type="search" wire:model.live.debounce.300ms="search" class="form-input" placeholder="{{ __('Search by name, SKU or barcode') }}" autocomplete="off">
-                        @if ($results->isNotEmpty())
-                            <ul class="absolute z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                                @foreach ($results as $r)
-                                    <li><button type="button" wire:click="addProduct({{ $r->id }})" class="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700"><span class="font-medium">{{ $r->name }}</span><span class="text-xs text-slate-500">{{ $r->sku }} · {{ Decimal::format($r->selling_price) }}</span></button></li>
-                                @endforeach
+                        <div class="relative">
+                            <x-icon name="search" class="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-slate-400" />
+                            <input id="pos-search" x-ref="input" type="search" x-model="term" x-on:input="onInput()"
+                                   x-on:keydown.arrow-down.prevent="move(1)" x-on:keydown.arrow-up.prevent="move(-1)" x-on:keydown.enter.prevent="enter()"
+                                   x-on:focus="if (results.length && resultsFor === term.trim()) open = true"
+                                   role="combobox" aria-autocomplete="list" aria-controls="pos-search-results" :aria-expanded="open.toString()"
+                                   :aria-activedescendant="open && active >= 0 ? 'pos-search-option-' + active : null"
+                                   enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                                   class="form-input pl-11" placeholder="{{ __('Search by name, SKU or barcode') }}">
+                            <span x-show="loading" x-cloak class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{{ __('Searching…') }}</span>
+                        </div>
+                        <div x-show="open" x-cloak x-transition.opacity.duration.100ms
+                             class="absolute inset-x-0 z-30 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                            <p x-show="results.length === 0" class="px-4 py-4 text-sm text-slate-500">{{ __('No matching products. Check the spelling or scan the barcode.') }}</p>
+                            <ul id="pos-search-results" x-ref="list" role="listbox" aria-label="{{ __('Search products') }}"
+                                class="max-h-[min(24rem,45dvh)] divide-y divide-slate-100 overflow-y-auto overscroll-contain dark:divide-slate-700">
+                                <template x-for="(r, i) in results" :key="r.uuid">
+                                    <li role="option" :id="'pos-search-option-' + i" :data-index="i" :aria-selected="(i === active).toString()"
+                                        :aria-disabled="(r.status !== 'in_stock').toString()"
+                                        x-on:click="choose(i)" x-on:mousemove="active = i"
+                                        :class="i === active ? 'bg-brand-50 ring-2 ring-inset ring-brand-500 dark:bg-brand-900/30' : ''"
+                                        class="flex min-h-16 cursor-pointer items-start justify-between gap-3 px-4 py-3 text-left">
+                                        <div class="min-w-0 flex-1">
+                                            <p class="font-semibold leading-snug [overflow-wrap:anywhere]" x-text="r.name"></p>
+                                            <p class="mt-0.5 text-xs text-slate-500 [overflow-wrap:anywhere]">
+                                                <span x-text="r.sku"></span><template x-if="r.barcode"><span> · <span class="font-mono" x-text="r.barcode"></span></span></template>
+                                            </p>
+                                            <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                                <span x-show="r.status === 'in_stock'" class="rounded-full bg-brand-100 px-2 py-0.5 font-semibold text-brand-800 dark:bg-brand-900/50 dark:text-brand-100">{{ __('In stock') }}</span>
+                                                <span x-show="r.status === 'out_of_stock'" class="rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-800 dark:bg-red-950 dark:text-red-200">{{ __('Out of stock') }}</span>
+                                                <span x-show="r.status === 'not_sellable'" class="rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{{ __('Not for sale') }}</span>
+                                                <span x-show="r.status === 'no_price'" class="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{{ __('No price') }}</span>
+                                                <span class="text-slate-600 dark:text-slate-300">{{ __('Available') }}: <span class="tabular-nums" x-text="r.available + ' ' + r.base_unit"></span></span>
+                                            </p>
+                                            <p x-show="r.status === 'out_of_stock'" class="mt-1 text-xs text-red-700 dark:text-red-300">{{ __('None at :location. Receive or transfer stock to this selling location first.', ['location' => $location ? __($location->name) : '—']) }}</p>
+                                        </div>
+                                        <div class="shrink-0 text-right">
+                                            <p class="font-bold tabular-nums" x-text="r.price !== null ? @js($currency) + ' ' + r.price : '—'"></p>
+                                            <p class="text-xs text-slate-500" x-show="r.unit" x-text="'/ ' + r.unit"></p>
+                                        </div>
+                                    </li>
+                                </template>
                             </ul>
-                        @endif
+                            <p class="hidden border-t border-slate-100 px-4 py-2 text-xs text-slate-500 lg:block dark:border-slate-700">{{ __('↑ ↓ to choose · Enter to add · Esc to close') }}</p>
+                        </div>
                     </div>
                 </div>
 

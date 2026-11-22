@@ -29,12 +29,16 @@
         <div class="card text-sm">
             <p class="mb-3 font-semibold">{{ __('Cost & margin') }} @if ($branch)<span class="font-normal text-slate-500">· {{ $branch->name }}</span>@endif</p>
             <dl class="space-y-2">
-                <div class="flex justify-between"><dt class="text-slate-500">{{ __('Latest purchase cost') }}</dt><dd class="tabular-nums">{{ Decimal::format($product->purchase_cost, 2) }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-500">{{ __('Latest purchase cost') }}</dt><dd class="tabular-nums">{{ Decimal::isPositive((string) $product->purchase_cost) ? Decimal::format($product->purchase_cost, 2) : '—' }}</dd></div>
+                @if ($product->reference_buying_price !== null)
+                    <div class="flex justify-between"><dt class="text-slate-500">{{ __('Reference buying price') }}</dt><dd class="tabular-nums">{{ Decimal::format($product->reference_buying_price, 2) }}</dd></div>
+                @endif
                 <div class="flex justify-between"><dt class="text-slate-500">{{ __('Weighted-average cost') }}</dt><dd class="tabular-nums">{{ Decimal::isPositive($averageCost) ? Decimal::format($averageCost, 2) : '—' }}</dd></div>
                 <div class="flex justify-between"><dt class="text-slate-500">{{ __('Selling price') }}</dt><dd class="tabular-nums">{{ Decimal::format($basePrice) }}</dd></div>
-                <div class="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-700"><dt class="text-slate-500">{{ __('Gross profit estimate') }}</dt><dd class="font-semibold tabular-nums">{{ Decimal::format($margin) }}@if ($marginPercent !== null) ({{ $marginPercent }}%)@endif</dd></div>
+                <div class="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-700"><dt class="text-slate-500">{{ __('Gross profit estimate') }}</dt><dd class="font-semibold tabular-nums">{{ $margin !== null ? Decimal::format($margin) : '—' }}@if ($marginPercent !== null) ({{ $marginPercent }}%)@endif</dd></div>
             </dl>
             <p class="mt-2 text-xs text-slate-400">{{ __('Per base unit, excluding tax. Uses weighted-average cost when stock exists.') }}</p>
+            @if ($margin === null)<p class="mt-1 text-xs text-slate-400">{{ __('No actual cost yet: profit is shown after the first goods receipt. The reference buying price is never used as cost.') }}</p>@endif
         </div>
     </div>
 

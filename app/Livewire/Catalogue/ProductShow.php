@@ -164,7 +164,10 @@ class ProductShow extends Component
 
         $averageCost = $branch ? $ledger->averageCost($product->company_id, $branch->id, $product->id) : '0';
         $basePrice = $quotes[$base->id]->price ?? '0';
-        $margin = Decimal::sub($basePrice, $averageCost !== '0.0000' ? $averageCost : (string) $product->purchase_cost, 4);
+        // Profit only from ACTUAL costs (branch average, else latest receipt
+        // cost); never from the reference buying price. No cost yet -> no estimate.
+        $actualCost = Decimal::isPositive((string) $averageCost) ? (string) $averageCost : (string) $product->purchase_cost;
+        $margin = Decimal::isPositive($actualCost) ? Decimal::sub($basePrice, $actualCost, 4) : null;
 
         return view('livewire.catalogue.product-show', [
             'product' => $product,
@@ -179,7 +182,7 @@ class ProductShow extends Component
             'averageCost' => $averageCost,
             'basePrice' => $basePrice,
             'margin' => $margin,
-            'marginPercent' => Decimal::isPositive($basePrice) ? Decimal::round(Decimal::div(Decimal::mul($margin, '100'), $basePrice), 1) : null,
+            'marginPercent' => $margin !== null && Decimal::isPositive($basePrice) ? Decimal::round(Decimal::div(Decimal::mul($margin, '100'), $basePrice), 1) : null,
             'barcodeTypes' => BarcodeType::cases(),
             'can' => [
                 'update' => auth()->user()->can('products.update'),

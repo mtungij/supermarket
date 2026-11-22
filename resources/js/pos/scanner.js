@@ -27,18 +27,30 @@ export function posScanner() {
                 if (target && (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName) || target.isContentEditable)) return;
                 if (event.key.length === 1 || event.key === 'Enter') this.$refs.scan?.focus();
             };
+            // Exact barcode/SKU picked in the product search box (search.js)
+            // joins the SAME queue, so ordering and de-duplication hold.
+            this._onScan = (event) => this.enqueue(event.detail?.code);
+            this._onFocus = () => this.focus();
             window.addEventListener('keydown', this._onKey);
-            window.addEventListener('pos-focus', () => this.focus());
+            window.addEventListener('pos-focus', this._onFocus);
+            window.addEventListener('pos-scan', this._onScan);
         },
 
         destroy() {
             window.removeEventListener('keydown', this._onKey);
+            window.removeEventListener('pos-focus', this._onFocus);
+            window.removeEventListener('pos-scan', this._onScan);
         },
 
         submit() {
             const input = this.$refs.scan;
             const code = (input.value || '').trim();
             input.value = '';
+            this.enqueue(code);
+        },
+
+        enqueue(code) {
+            code = (code || '').trim();
             if (code === '') return;
             this.queue.push(code);
             this.drain();

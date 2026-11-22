@@ -26,7 +26,8 @@ class ProductImageTest extends TestCase
     {
         return Livewire::test(ProductForm::class)
             ->set('name', 'Cooking Oil 1L')
-            ->set('category', $this->defaultCategory($company)->uuid);
+            ->set('category', $this->defaultCategory($company)->uuid)
+            ->set('sellingPrice', '4500');
     }
 
     public function test_valid_image_is_reencoded_and_stored_under_a_tenant_path(): void

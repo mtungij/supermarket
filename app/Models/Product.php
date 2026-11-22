@@ -38,6 +38,7 @@ class Product extends Model
             'product_type' => ProductType::class,
             'tax_class' => TaxClass::class,
             'purchase_cost' => 'decimal:4',
+            'reference_buying_price' => 'decimal:4',
             'selling_price' => 'decimal:2',
             'min_stock_level' => 'decimal:4',
             'reorder_level' => 'decimal:4',

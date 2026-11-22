@@ -76,7 +76,7 @@ class SubscriptionAndWorkflowUiTest extends TestCase
         $this->actingAs($owner)->get(route('inventory.stock'))->assertOk();
 
         $this->actingAsTenant($owner, $company);
-        Livewire::test(ProductForm::class)->set('name', 'New')->set('category', $this->defaultCategory($company)->uuid)->call('save')->assertHasErrors('name');
+        Livewire::test(ProductForm::class)->set('name', 'New')->set('category', $this->defaultCategory($company)->uuid)->set('sellingPrice', '1000')->call('save')->assertHasErrors('name');
 
         Livewire::test(PurchaseOrderForm::class)
             ->set('supplier', $this->makeSupplier($company)->uuid)
