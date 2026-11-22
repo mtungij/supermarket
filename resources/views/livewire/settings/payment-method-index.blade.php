@@ -11,7 +11,7 @@
                 <td class="px-4 py-3 font-medium">{{ __($m->name) }}</td><td class="px-4 py-3">{{ __($m->type->label()) }}</td>
                 <td class="px-4 py-3">{{ $m->requires_reference ? __('Required') : __('Optional') }}</td>
                 <td class="px-4 py-3"><x-ui.status :status="$m->is_active ? 'active' : 'inactive'" /></td>
-                <td class="px-4 py-3 text-right">@if ($m->type->value !== 'exchange_credit')<button type="button" wire:click="edit('{{ $m->uuid }}')" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
+                <td class="px-4 py-3 text-right">@if ($m->type->value !== 'exchange_credit')<button type="button" wire:click="edit('{{ $m->uuid }}')" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
             </tr>
         @endforeach
     </x-ui.table>

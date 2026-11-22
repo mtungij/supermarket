@@ -134,7 +134,7 @@
         <x-ui.stat-card :label="__('Remaining after receipt')" :value="$summary['remaining_after']" :hint="__('base units')" icon="shield" />
     </section>
 
-    <div class="sticky bottom-0 z-10 -mx-4 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:flex-row sm:items-center dark:border-slate-700 dark:bg-slate-900/95">
+    <div class="sticky bottom-0 z-10 -mx-3 flex flex-col gap-3 border-t border-slate-200 bg-white/95 px-3 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 backdrop-blur sm:flex-row sm:items-center dark:border-slate-700 dark:bg-slate-900/95">
         <button type="button" wire:click="save" wire:confirm="{{ __('Post this goods receipt? Stock will be updated.') }}" wire:loading.attr="disabled" wire:target="save" class="btn btn-primary" @disabled($summary['selected_products'] === 0)>
             <span wire:loading.remove wire:target="save">{{ __('Post goods receipt') }}</span><span wire:loading wire:target="save">{{ __('Posting…') }}</span>
         </button>

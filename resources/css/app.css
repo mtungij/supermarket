@@ -67,3 +67,42 @@
         @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-800/60;
     }
 }
+
+/* ---------------------------------------------------------------------------
+ * Stacked tables on phones (< 640px): each row becomes a card of
+ * "label  value" lines. Labels come from data-label (responsive-tables.js).
+ * ------------------------------------------------------------------------- */
+@media (max-width: 639.98px) {
+    table[data-stack] { display: block; min-width: 0 !important; }
+    table[data-stack] > thead { display: none; }
+    table[data-stack] > tbody { display: block; }
+    table[data-stack] > tbody > tr { display: block; padding: 0.75rem 1rem; }
+    table[data-stack] > tbody > tr > td {
+        display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+        padding: 0.25rem 0 !important; text-align: right !important; white-space: normal !important; min-width: 0;
+    }
+    table[data-stack] > tbody > tr > td > * { min-width: 0; }
+    table[data-stack] > tbody > tr > td::before {
+        content: attr(data-label); flex-shrink: 0; max-width: 45%;
+        text-align: left; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+        color: var(--color-slate-500);
+    }
+    table[data-stack] > tbody > tr > td[data-label=""]::before,
+    table[data-stack] > tbody > tr > td[colspan]::before { content: none; }
+    table[data-stack] > tbody > tr > td[colspan] { justify-content: center; text-align: center !important; }
+    /* first cell (usually the name) reads as the card title */
+    table[data-stack] > tbody > tr > td:first-child { display: block; text-align: left !important; font-size: 1rem; overflow-wrap: anywhere; }
+    table[data-stack] > tbody > tr > td:first-child::before { content: none; }
+    /* the card title link is the row's main tap target */
+    table[data-stack] > tbody > tr > td:first-child > a:only-of-type,
+    table[data-stack] > tbody > tr > td:first-child > a:first-child { display: inline-flex; align-items: center; min-height: 2.75rem; }
+    table[data-stack] > tbody > tr > td:last-child[data-label=""] { justify-content: flex-start; flex-wrap: wrap; }
+}
+
+/* Visible keyboard focus everywhere (mouse clicks unaffected). */
+@layer base {
+    :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+        outline: 3px solid var(--color-brand-500);
+        outline-offset: 2px;
+    }
+}

@@ -44,8 +44,8 @@
         </form>
     @endif
 
-    <div class="card overflow-x-auto p-0">
-        <table class="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+    <div class="card relative overflow-x-auto p-0">
+        <table data-stack class="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
             <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-800">
                 <tr>
                     <th class="px-4 py-3">{{ __('Device') }}</th>
@@ -65,7 +65,7 @@
                                 <div class="flex flex-wrap gap-2" x-data="{ w: '{{ $device->receipt_paper_width }}', l: '{{ $device->stockLocation?->uuid }}' }">
                                     <select x-model="w" class="h-10 rounded-lg border border-slate-300 bg-transparent px-2 text-sm dark:border-slate-600" aria-label="{{ __('Receipt paper') }}">@foreach ($widths as $w) <option value="{{ $w }}">{{ $w }} mm</option> @endforeach</select>
                                     <select x-model="l" class="h-10 rounded-lg border border-slate-300 bg-transparent px-2 text-sm dark:border-slate-600" aria-label="{{ __('Selling location') }}"><option value="">{{ __('Branch default') }}</option>@foreach ($sellableLocations[$device->branch_id] ?? [] as $sl) <option value="{{ $sl->uuid }}">{{ __($sl->name) }}</option> @endforeach</select>
-                                    <button type="button" x-on:click="$wire.configure(@js($device->uuid), w, l)" class="rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-100">{{ __('Save') }}</button>
+                                    <button type="button" x-on:click="$wire.configure(@js($device->uuid), w, l)" class="inline-flex h-10 items-center rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-100">{{ __('Save') }}</button>
                                 </div>
                             @else
                                 {{ $device->receipt_paper_width }} mm · {{ $device->stockLocation ? __($device->stockLocation->name) : __('Branch default') }}
@@ -75,7 +75,7 @@
                         <td class="px-4 py-3 text-right">
                             @if ($canManage && $device->status !== $revoked)
                                 <button type="button" wire:click="revoke('{{ $device->uuid }}')" wire:confirm="{{ __('Revoke this device? It will no longer be able to sync.') }}"
-                                        class="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">{{ __('Revoke') }}</button>
+                                        class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">{{ __('Revoke') }}</button>
                             @endif
                         </td>
                     </tr>

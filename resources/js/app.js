@@ -8,6 +8,7 @@
  */
 
 import { posScanner, printReceipt } from './pos/scanner';
+import './responsive-tables';
 
 window.posScanner = posScanner;
 window.printReceipt = printReceipt;

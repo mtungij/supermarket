@@ -37,11 +37,11 @@
                 </td>
                 <td class="whitespace-nowrap px-4 py-3 text-right">
                     <div class="inline-flex flex-wrap justify-end gap-1" x-data>
-                        <a href="{{ route('purchasing.orders.show', $o) }}" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('View') }}</a>
-                        @if ($o->actions['edit']) <a href="{{ route('purchasing.orders.edit', $o) }}" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</a> @endif
-                        @if ($o->actions['send']) <button type="button" wire:click="send('{{ $o->uuid }}')" wire:loading.attr="disabled" wire:confirm="{{ __('Send this purchase order?') }}" class="rounded-lg px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-100 dark:hover:bg-brand-900/30">{{ __('Send PO') }}</button> @endif
+                        <a href="{{ route('purchasing.orders.show', $o) }}" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('View') }}</a>
+                        @if ($o->actions['edit']) <a href="{{ route('purchasing.orders.edit', $o) }}" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</a> @endif
+                        @if ($o->actions['send']) <button type="button" wire:click="send('{{ $o->uuid }}')" wire:loading.attr="disabled" wire:confirm="{{ __('Send this purchase order?') }}" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-100 dark:hover:bg-brand-900/30">{{ __('Send PO') }}</button> @endif
                         @if ($o->actions['receive']) <a href="{{ route('purchasing.orders.receive', $o) }}" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">{{ __('Receive') }}</a> @endif
-                        @if ($o->actions['cancel']) <button type="button" x-on:click="const r = prompt(@js(__('Reason for cancelling :ref', ['ref' => $o->reference]))); if (r) $wire.cancel(@js($o->uuid), r)" class="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40">{{ __('Cancel') }}</button> @endif
+                        @if ($o->actions['cancel']) <button type="button" x-on:click="const r = prompt(@js(__('Reason for cancelling :ref', ['ref' => $o->reference]))); if (r) $wire.cancel(@js($o->uuid), r)" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40">{{ __('Cancel') }}</button> @endif
                     </div>
                 </td>
             </tr>

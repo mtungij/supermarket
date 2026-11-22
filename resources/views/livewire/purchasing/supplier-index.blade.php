@@ -22,7 +22,7 @@
                 <td class="px-4 py-3 tabular-nums">{{ $s->purchase_orders_count }}</td>
                 <td class="px-4 py-3 text-right tabular-nums">{{ \App\Support\Decimal::format((string) ($s->balance ?? '0')) }}</td>
                 <td class="px-4 py-3"><x-ui.status :status="$s->is_active ? 'active' : 'inactive'" /></td>
-                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="edit('{{ $s->uuid }}')" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
+                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="edit('{{ $s->uuid }}')" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
             </tr>
         @empty
             <x-ui.empty-row colspan="6">{{ __('No suppliers yet.') }}</x-ui.empty-row>

@@ -15,7 +15,7 @@
                 <td class="px-4 py-3 tabular-nums">{{ $counts[$l->id] ?? 0 }}</td>
                 <td class="px-4 py-3">
                     @if ($canManage && $l->type->canBeSellable())
-                        <button type="button" wire:click="toggleSellable('{{ $l->uuid }}')" @if (! $l->is_sellable) wire:confirm="{{ __('Allow the POS to sell stock from :location?', ['location' => __($l->name)]) }}" @endif class="rounded-lg px-2 py-1">
+                        <button type="button" wire:click="toggleSellable('{{ $l->uuid }}')" @if (! $l->is_sellable) wire:confirm="{{ __('Allow the POS to sell stock from :location?', ['location' => __($l->name)]) }}" @endif class="inline-flex min-h-11 items-center rounded-lg px-2 hover:bg-slate-100 dark:hover:bg-slate-700">
                             <x-ui.badge :color="$l->is_sellable ? 'green' : 'slate'">{{ $l->is_sellable ? __('Sellable') : __('Not sellable') }}</x-ui.badge>
                         </button>
                     @else
@@ -23,7 +23,7 @@
                     @endif
                 </td>
                 <td class="px-4 py-3"><x-ui.status :status="$l->is_active ? 'active' : 'inactive'" /></td>
-                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="toggle('{{ $l->uuid }}')" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ $l->is_active ? __('Deactivate') : __('Activate') }}</button>@endif</td>
+                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="toggle('{{ $l->uuid }}')" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ $l->is_active ? __('Deactivate') : __('Activate') }}</button>@endif</td>
             </tr>
         @endforeach
     </x-ui.table>

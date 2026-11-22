@@ -14,7 +14,7 @@
                 <td class="px-4 py-3 font-medium">{{ $c->name }}</td><td class="px-4 py-3">{{ $c->phone }}</td><td class="px-4 py-3">{{ $c->email }}</td>
                 <td class="px-4 py-3 text-right tabular-nums">{{ $c->sales_count }}</td><td class="px-4 py-3 text-right tabular-nums">{{ Decimal::format((string) ($c->sales_total ?? '0')) }}</td>
                 <td class="px-4 py-3"><x-ui.status :status="$c->is_active ? 'active' : 'inactive'" /></td>
-                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="edit('{{ $c->uuid }}')" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
+                <td class="px-4 py-3 text-right">@if ($canManage)<button type="button" wire:click="edit('{{ $c->uuid }}')" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Edit') }}</button>@endif</td>
             </tr>
         @empty
             <x-ui.empty-row colspan="7">{{ __('No customers yet.') }}</x-ui.empty-row>

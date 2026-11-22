@@ -141,7 +141,7 @@
                         <td class="px-4 py-3 text-xs">{{ $s->payments->map(fn ($p) => __($p->method_name).' '.Decimal::format($p->amount))->join(', ') }}</td>
                         <td class="px-4 py-3"><x-ui.badge :color="$status === 'completed' ? 'green' : ($status === 'returned' ? 'red' : 'amber')">{{ __(ucfirst(str_replace('_', ' ', $status))) }}</x-ui.badge></td>
                         <td class="whitespace-nowrap px-4 py-3 text-right">
-                            <button type="button" x-data x-on:click="window.printReceipt(@js(route('sales.receipt', ['sale' => $s->uuid, 'autoprint' => 1])))" class="rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Reprint') }}</button>
+                            <button type="button" x-data x-on:click="window.printReceipt(@js(route('sales.receipt', ['sale' => $s->uuid, 'autoprint' => 1])))" class="inline-flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700">{{ __('Reprint') }}</button>
                         </td>
                     </tr>
                 @empty

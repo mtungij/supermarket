@@ -65,7 +65,7 @@
                             <div><select wire:model="lines.{{ $i }}.batch_id" class="form-input" aria-label="{{ __('Batch') }}"><option value="">{{ __('Batch…') }}</option>@foreach ($this->batchesFor($line['product_id']) as $b) <option value="{{ $b->id }}">{{ $b->batch_number }}{{ $b->expires_on ? ' · '.$b->expires_on->format('d/m/Y') : '' }}</option> @endforeach</select>@error("lines.$i.batch_id") <p class="form-error">{{ $message }}</p> @enderror</div>
                         @endif
                         @error("lines.$i.direction") <p class="form-error md:col-span-6">{{ $message }}</p> @enderror
-                        <button type="button" wire:click="removeLine({{ $i }})" class="text-sm font-medium text-red-600 md:text-right">{{ __('Remove') }}</button>
+                        <button type="button" wire:click="removeLine({{ $i }})" class="min-h-11 text-sm font-medium text-red-600 md:text-right">{{ __('Remove') }}</button>
                     </div>
                 @endforeach
             </div>

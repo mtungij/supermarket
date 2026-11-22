@@ -52,7 +52,7 @@
                     <td class="px-4 py-3 text-right tabular-nums">{{ isset($quotes[$u->id]) ? Decimal::format($quotes[$u->id]->price) : '—' }}</td>
                     <td class="px-4 py-3 text-right">
                         @if ($can['update'] && ! $u->is_base && $u->is_active)
-                            <button type="button" wire:click="removeUnit({{ $u->id }})" wire:confirm="{{ __('Remove this unit? Past documents keep their own conversion.') }}" class="text-sm font-medium text-red-600">{{ __('Remove') }}</button>
+                            <button type="button" wire:click="removeUnit({{ $u->id }})" wire:confirm="{{ __('Remove this unit? Past documents keep their own conversion.') }}" class="inline-flex min-h-10 items-center rounded-lg px-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">{{ __('Remove') }}</button>
                         @endif
                     </td>
                 </tr>
@@ -85,7 +85,7 @@
                     @if ($can['update'])
                         <span class="ml-auto flex gap-2">
                             @unless ($b->is_primary) <button type="button" wire:click="makePrimary({{ $b->id }})" class="text-sm font-medium">{{ __('Make primary') }}</button> @endunless
-                            <button type="button" wire:click="removeBarcode({{ $b->id }})" wire:confirm="{{ __('Remove this barcode?') }}" class="text-sm font-medium text-red-600">{{ __('Remove') }}</button>
+                            <button type="button" wire:click="removeBarcode({{ $b->id }})" wire:confirm="{{ __('Remove this barcode?') }}" class="inline-flex min-h-10 items-center rounded-lg px-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">{{ __('Remove') }}</button>
                         </span>
                     @endif
                 </li>
@@ -94,11 +94,11 @@
             @endforelse
         </ul>
         @if ($can['update'])
-            <form wire:submit="addBarcode" class="mt-4 grid gap-4 md:grid-cols-5 md:items-end">
-                <x-ui.field class="md:col-span-2" :label="__('Barcode')" for="new-barcode" error="barcode"><input id="new-barcode" type="text" wire:model="barcode" class="form-input font-mono" autocomplete="off" placeholder="{{ __('Scan or type') }}"></x-ui.field>
+            <form wire:submit="addBarcode" class="mt-4 grid gap-4 sm:grid-cols-2 sm:items-end xl:grid-cols-5">
+                <x-ui.field class="sm:col-span-2" :label="__('Barcode')" for="new-barcode" error="barcode"><input id="new-barcode" type="text" wire:model="barcode" class="form-input font-mono" autocomplete="off" placeholder="{{ __('Scan or type') }}"></x-ui.field>
                 <x-ui.field :label="__('Type')" for="barcode-type" error="barcodeType"><select id="barcode-type" wire:model="barcodeType" class="form-input">@foreach ($barcodeTypes as $t) <option value="{{ $t->value }}">{{ __($t->label()) }}</option> @endforeach</select></x-ui.field>
                 <x-ui.field :label="__('Unit')" for="barcode-unit" error="barcodeUnit"><select id="barcode-unit" wire:model="barcodeUnit" class="form-input"><option value="">{{ __($product->baseUnit->name) }}</option>@foreach ($units->where('is_base', false)->where('is_active', true) as $u) <option value="{{ $u->id }}">{{ __($u->unit->name) }} (×{{ Decimal::trim($u->factor) }})</option> @endforeach</select></x-ui.field>
-                <div class="flex gap-2"><button type="submit" class="btn btn-primary">{{ __('Add') }}</button><button type="button" wire:click="generateBarcode" class="btn btn-secondary" title="{{ __('Generate internal barcode') }}">{{ __('Generate') }}</button></div>
+                <div class="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1"><button type="submit" class="btn btn-primary">{{ __('Add') }}</button><button type="button" wire:click="generateBarcode" class="btn btn-secondary" title="{{ __('Generate internal barcode') }}">{{ __('Generate') }}</button></div>
             </form>
         @endif
     </section>

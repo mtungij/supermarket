@@ -7,7 +7,7 @@
 ])
 <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
     <div class="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <button type="button" class="-ml-1 rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800" @click="sidebarOpen = true" aria-label="{{ __('Open menu') }}">
+        <button type="button" x-ref="menuButton" class="-ml-1 grid size-11 shrink-0 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800" @click="open()" aria-label="{{ __('Open menu') }}" aria-controls="app-sidebar" :aria-expanded="sidebarOpen.toString()">
             <x-icon name="menu" class="size-6" />
         </button>
 

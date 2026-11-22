@@ -1,5 +1,8 @@
 @use('App\Support\Decimal')
-<div x-data x-on:sale-completed.window="window.printReceipt($event.detail.url)">
+<div x-data="{ typing: false }"
+     x-on:sale-completed.window="window.printReceipt($event.detail.url)"
+     x-on:focusin="typing = window.innerWidth < 1024 && $event.target.matches('input:not([data-barcode-scan]), select, textarea')"
+     x-on:focusout="typing = false">
     @if ($needsDevice)
         {{-- Register selection (once per browser; remembered). No shift is opened. --}}
         <div class="mx-auto max-w-xl card mt-6 space-y-4">
@@ -26,20 +29,20 @@
             </div>
         </div>
     @else
-        <div class="grid gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_400px] lg:pb-0">
+        <div class="grid gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0 2xl:grid-cols-[minmax(0,1fr)_440px]">
             {{-- LEFT: scan, search, cart --}}
             <section class="min-w-0 space-y-3">
                 @if ($exchange)
                     <div class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-900/30 dark:text-sky-100">{{ __('Exchange for return :ref · credit :amount', ['ref' => $exchange->return_number, 'amount' => Decimal::format($exchange->refund_total)]) }}</div>
                 @endif
-                <div class="card space-y-3 p-3 sm:p-4" x-data="posScanner()">
+                <div class="card sticky top-14 z-10 space-y-3 p-3 shadow-md sm:p-4 lg:static lg:shadow-sm" x-data="posScanner()">
                     <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                         <span>{{ __('Register') }}: <span class="font-medium text-slate-700 dark:text-slate-200">{{ $device?->name ?? __('None') }}</span> · {{ __('Selling from') }}: <span class="font-medium text-slate-700 dark:text-slate-200">{{ $location ? __($location->name) : '—' }}</span></span>
                         @if ($device) <button type="button" wire:click="changeDevice" class="underline">{{ __('Change register') }}</button> @endif
                     </div>
                     <label for="pos-scan" class="sr-only">{{ __('Scan barcode') }}</label>
                     <div class="flex gap-2">
-                        <input id="pos-scan" x-ref="scan" data-barcode-scan type="text" x-on:keydown.enter.prevent="submit()"
+                        <input id="pos-scan" x-ref="scan" data-barcode-scan type="text" wire:ignore x-on:keydown.enter.prevent="submit()"
                                enterkeyhint="enter" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus
                                class="form-input min-w-0 flex-1 py-4 font-mono text-xl" placeholder="{{ __('Scan barcode or type code + Enter') }}">
                         <button type="button" x-on:click="submit()" class="btn btn-secondary shrink-0">{{ __('Add') }}</button>
@@ -102,7 +105,7 @@
             </section>
 
             {{-- RIGHT: customer, totals, payment --}}
-            <aside class="space-y-3 lg:sticky lg:top-18 lg:self-start" id="pos-checkout">
+            <aside class="space-y-3 lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100vh-5.5rem)] lg:self-start lg:overflow-y-auto" id="pos-checkout">
                 @if ($can['customers'])
                     <div class="card space-y-2 p-3 sm:p-4">
                         <div class="flex items-center justify-between gap-2">
@@ -153,7 +156,7 @@
                 </div>
 
                 @if ($paying && $cart !== [])
-                    <div class="card space-y-3 p-3 sm:p-4" id="pos-payment">
+                    <div class="card scroll-mt-20 space-y-3 p-3 sm:p-4" id="pos-payment">
                         <p class="text-sm font-semibold">{{ __('Payment') }}</p>
                         @foreach ($payments as $i => $p)
                             @php($m = $methods->get($p['method']))
@@ -198,10 +201,22 @@
             </aside>
         </div>
 
-        {{-- Mobile: sticky total + pay --}}
-        <div class="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 border-t border-slate-200 bg-white p-3 lg:hidden dark:border-slate-700 dark:bg-slate-900">
-            <div class="min-w-0 flex-1"><p class="text-xs text-slate-500">{{ __('Total') }}</p><p class="truncate text-xl font-bold tabular-nums">{{ $currency }} {{ Decimal::format($summary['totals']['total']) }}</p></div>
-            <button type="button" wire:click="startPayment" x-on:click="$nextTick(() => document.getElementById('pos-checkout')?.scrollIntoView({ behavior: 'smooth' }))" class="btn btn-primary" @disabled($cart === [])>{{ __('Pay') }}</button>
+        {{-- Phones/tablets: total + the next checkout step always reachable.
+             Hidden while a text field is focused so the on-screen keyboard
+             cannot push it over the field being edited. --}}
+        <div x-show="! typing" class="fixed inset-x-0 bottom-0 z-20 flex items-center gap-2 border-t border-slate-200 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.06)] lg:hidden dark:border-slate-700 dark:bg-slate-900" data-pos-mobile-bar>
+            <div class="min-w-0 flex-1">
+                <p class="truncate text-xs text-slate-500">{{ __('Total') }} ({{ $currency }}) · {{ trans_choice(':count item|:count items', count($cart)) }}</p>
+                <p class="truncate text-lg font-bold tabular-nums min-[400px]:text-xl" aria-label="{{ __('Total') }}: {{ $currency }} {{ Decimal::format($summary['totals']['total']) }}">{{ Decimal::format($summary['totals']['total']) }}</p>
+            </div>
+            @if ($paying && $cart !== [])
+                <button type="button" x-on:click="document.getElementById('pos-payment')?.scrollIntoView({ behavior: 'smooth', block: 'start' })" class="btn btn-secondary shrink-0 px-3" aria-label="{{ __('Payment') }}"><x-icon name="wallet" /></button>
+                <button type="button" wire:click="checkout" wire:loading.attr="disabled" wire:target="checkout" class="btn btn-primary shrink-0 px-4">
+                    <span wire:loading.remove wire:target="checkout">{{ __('Complete sale') }}</span><span wire:loading wire:target="checkout">{{ __('Processing…') }}</span>
+                </button>
+            @else
+                <button type="button" wire:click="startPayment" x-on:click="$nextTick(() => setTimeout(() => document.getElementById('pos-payment')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350))" class="btn btn-primary shrink-0 px-8" @disabled($cart === [])>{{ __('Pay') }}</button>
+            @endif
         </div>
     @endif
 </div>
