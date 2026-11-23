@@ -9,8 +9,10 @@
         </x-ui.confirm-dialog>
 
     - role="alertdialog", aria-modal, labelled + described
-    - focus is trapped inside (Alpine x-trap), the page behind is inert and
-      does not scroll; on close, focus returns to the element that opened it
+    - focus is trapped inside (Alpine x-trap: background aria-hidden, no
+      page scroll); on close focus returns to `return-focus` (the button
+      that opened it - needed because Livewire disables that button while
+      the server check runs, which drops focus)
     - Escape, Cancel and the backdrop close it (never while the action runs)
     - the confirm button calls the Livewire action `confirm`; it is
       disabled + shows a busy label while the request runs, so a double
@@ -27,13 +29,16 @@
     'tone' => 'primary',       // primary | danger
     'maxWidth' => 'max-w-lg',
     'disabled' => false,
+    'returnFocus' => null,     // CSS selector focused after closing (e.g. '[data-post]')
 ])
 @php($dialogId = 'dialog-'.\Illuminate\Support\Str::random(8))
 <div x-data="{ open: @entangle($attributes->wire('model')), busy: false }"
      x-cloak x-show="open"
      x-on:keydown.escape.window="if (open && ! busy) open = false"
      x-effect="if (! open) busy = false"
-     x-init="Livewire.hook('request', ({ succeed, fail }) => { succeed(() => $nextTick(() => busy = false)); fail(() => busy = false) })"
+     x-init="
+        $watch('open', (value) => { if (! value && {{ $returnFocus ? 'true' : 'false' }}) setTimeout(() => document.querySelector(@js($returnFocus))?.focus(), 30) });
+        Livewire.hook('request', ({ succeed, fail }) => { succeed(() => $nextTick(() => busy = false)); fail(() => busy = false) })"
      class="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6"
      data-confirm-dialog="{{ $confirm }}">
     <div x-show="open" x-transition.opacity.duration.150ms x-on:click="if (! busy) open = false"
@@ -44,6 +49,8 @@
          role="alertdialog" aria-modal="true" aria-labelledby="{{ $dialogId }}-title" @if ($description) aria-describedby="{{ $dialogId }}-desc" @endif
          class="relative flex max-h-[calc(100dvh-2rem)] w-full {{ $maxWidth }} flex-col overflow-hidden rounded-2xl bg-white text-slate-900 shadow-2xl ring-1 ring-black/5 dark:bg-slate-800 dark:text-slate-100 dark:ring-white/10"
          data-dialog-panel>
+        {{-- header + body scroll together on short screens; the buttons stay visible --}}
+        <div class="min-h-0 flex-1 overflow-y-auto" data-dialog-body>
         <div class="flex items-start gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
             <span @class(['grid size-11 shrink-0 place-items-center rounded-full',
                 'bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200' => $tone !== 'danger',
@@ -56,15 +63,16 @@
             </div>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-6" data-dialog-body>
+        <div class="px-5 py-4 sm:px-6">
             {{ $slot }}
         </div>
+        </div>
 
-        <div class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6 dark:border-slate-700 dark:bg-slate-900/40">
-            <button type="button" x-on:click="open = false" x-bind:disabled="busy" class="btn btn-secondary" data-dialog-cancel>{{ $cancelLabel ?? __('Cancel') }}</button>
+        <div class="flex gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:justify-end sm:px-6 sm:py-4 dark:border-slate-700 dark:bg-slate-900/40">
+            <button type="button" x-on:click="open = false" x-bind:disabled="busy" class="btn btn-secondary min-w-0 flex-1 px-3 sm:flex-none sm:px-5" data-dialog-cancel>{{ $cancelLabel ?? __('Cancel') }}</button>
             <button type="button" wire:click="{{ $confirm }}" x-on:click="busy = true"
                     x-bind:disabled="busy" @disabled($disabled)
-                    @class(['btn', 'btn-danger' => $tone === 'danger', 'btn-primary' => $tone !== 'danger'])
+                    @class(['btn min-w-0 flex-1 px-3 sm:flex-none sm:px-5', 'btn-danger' => $tone === 'danger', 'btn-primary' => $tone !== 'danger'])
                     x-bind:aria-busy="busy.toString()" data-dialog-confirm>
                 <span x-show="! busy">{{ $confirmLabel ?? __('Confirm') }}</span>
                 <span x-show="busy" class="inline-flex items-center gap-2">

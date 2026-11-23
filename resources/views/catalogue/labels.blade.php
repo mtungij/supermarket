@@ -20,7 +20,14 @@
         </label>
         <label class="text-sm">{{ __('Copies') }} <input type="number" name="copies" min="1" max="200" value="{{ $copies }}" class="form-input w-24"></label>
         <label class="text-sm">{{ __('Layout') }}
-            <select name="layout" class="form-input"><option value="a4" @selected($layout === 'a4')>{{ __('A4 sheet') }}</option><option value="roll" @selected($layout === 'roll')>{{ __('Label printer (50×30 mm)') }}</option></select>
+            <select name="layout" class="form-input" onchange="this.form.submit()">
+                @foreach ($layouts as $l)
+                    <option value="{{ $l }}" @selected($l === $layout)>{{ match ($l) {
+                        'a4' => __('A4 sheet'), 'roll' => __('Label printer (50×30 mm)'),
+                        'thermal-70x37' => __('Thermal 70×37 mm'), 'thermal-37x70' => __('Thermal 37×70 mm (rotated)'),
+                    } }}</option>
+                @endforeach
+            </select>
         </label>
         <button type="submit" class="btn btn-secondary">{{ __('Update') }}</button>
         <button type="button" onclick="window.print()" class="btn btn-primary">{{ __('Print') }}</button>
@@ -32,7 +39,7 @@
                 <p class="w-full truncate text-xs font-semibold">{{ $product->name }}</p>
                 <div class="my-1 w-full">{!! $svg !!}</div>
                 <p class="font-mono text-[10px] tracking-widest">{{ $barcode->barcode }}</p>
-                <p class="text-sm font-bold">{{ $currency }} {{ \App\Support\Decimal::format($price) }} <span class="text-[10px] font-normal">/ {{ __($barcode->productUnit->unit->name) }}</span></p>
+                <p class="text-sm font-bold">{{ $currency }} {{ \App\Support\Decimal::format($price) }} <span class="text-[10px] font-normal">/ {{ $unit }}</span></p>
             </div>
         @endfor
     </main>

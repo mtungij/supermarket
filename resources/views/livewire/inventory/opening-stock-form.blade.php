@@ -207,8 +207,8 @@
         </section>
     @endif
     {{-- Post confirmation: totals come from the server check (OpeningStockService::preview), not from the browser. --}}
-    @if ($can['post'])
-        <x-ui.confirm-dialog wire:model="confirmingPost" confirm="post" max-width="max-w-lg"
+    @if ($can['post'] && ($document === null || $document->isDraft()))
+        <x-ui.confirm-dialog wire:model="confirmingPost" confirm="post" max-width="max-w-lg" return-focus="[data-post]"
             :title="__('Post opening stock?')"
             :description="__('Posting adds this stock and its value to inventory. It cannot be edited afterwards; corrections are made with Stock adjustments.')"
             :confirm-label="__('Confirm posting')" :busy-label="__('Posting…')">
@@ -237,8 +237,8 @@
         </x-ui.confirm-dialog>
     @endif
 
-    @if ($document && $can['manage'])
-        <x-ui.confirm-dialog wire:model="confirmingCancel" confirm="cancelDraft" tone="danger" max-width="max-w-md"
+    @if ($document?->isDraft() && $can['manage'])
+        <x-ui.confirm-dialog wire:model="confirmingCancel" confirm="cancelDraft" tone="danger" max-width="max-w-md" return-focus="[data-cancel-draft]"
             :title="__('Cancel this draft?')" :description="__('The draft :ref will be cancelled. Nothing is posted and stock does not change.', ['ref' => $document->reference])"
             :confirm-label="__('Cancel draft')" :cancel-label="__('Keep draft')" :busy-label="__('Cancelling…')" />
     @endif

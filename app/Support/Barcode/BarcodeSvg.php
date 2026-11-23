@@ -90,6 +90,40 @@ final class BarcodeSvg
         return $bits;
     }
 
+    /**
+     * Physically sized SVG for thermal labels: every module is exactly
+     * $moduleMm wide and the bars $heightMm tall, so the printed size does
+     * not depend on browser scaling. Quiet zones of $quiet modules on each
+     * side (EAN-13 needs >= 11 left / 7 right; Code 128 >= 10).
+     *
+     * $maxWidthMm caps the total width (long Code 128 values): the module is
+     * reduced to fit, never below what is returned in $moduleMm by reference.
+     */
+    public static function svgMm(string $code, float $heightMm, float &$moduleMm, float $maxWidthMm, int $quiet = 11): string
+    {
+        $bits = str_repeat('0', $quiet).self::modules($code).str_repeat('0', $quiet);
+        $count = strlen($bits);
+        $moduleMm = min($moduleMm, floor($maxWidthMm / $count * 1000) / 1000);
+        $rects = '';
+        $run = 0;
+
+        // merge adjacent dark modules into one rect: fewer edges, crisper print
+        foreach (str_split($bits.'0') as $i => $bit) {
+            if ($bit === '1') {
+                $run++;
+
+                continue;
+            }
+            if ($run > 0) {
+                $rects .= sprintf('<rect x="%d" y="0" width="%d" height="1"/>', $i - $run, $run);
+                $run = 0;
+            }
+        }
+
+        return sprintf('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d 1" preserveAspectRatio="none" width="%.3Fmm" height="%.2Fmm" role="img" aria-label="%s" fill="#000" shape-rendering="crispEdges">%s</svg>',
+            $count, $count * $moduleMm, $heightMm, e($code), $rects);
+    }
+
     /** Inline SVG (black bars, quiet zones included). */
     public static function svg(string $code, int $height = 60, float $module = 1.6): string
     {

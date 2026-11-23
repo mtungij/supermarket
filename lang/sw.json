@@ -1167,5 +1167,17 @@
     "Keep draft": "Baki na rasimu",
     "Cancelling…": "Inaghairi…",
     "Confirm": "Thibitisha",
-    "Working…": "Inashughulikia…"
+    "Working…": "Inashughulikia…",
+    "Thermal 70×37 mm": "Thermal 70×37 mm",
+    "Thermal 37×70 mm (rotated)": "Thermal 37×70 mm (imezungushwa)",
+    "In the print dialog choose:": "Kwenye dirisha la kuchapisha chagua:",
+    "your label printer": "printa yako ya lebo",
+    "Paper size": "Ukubwa wa karatasi",
+    "Margins": "Pambizo",
+    "Scale": "Kipimo",
+    "Headers and footers": "Vichwa na vijachini",
+    "off": "zima",
+    "If the label comes out sideways, switch the layout to": "Lebo ikitoka kwa upande, badilisha mpangilio kuwa",
+    "Actual size": "Ukubwa halisi",
+    ":n copies": "Nakala :n"
 }
