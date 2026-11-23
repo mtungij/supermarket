@@ -54,6 +54,12 @@ enum Permission: string
     case InventoryTransfer = 'inventory.transfer';
     case InventoryTransferReceive = 'inventory.transfer.receive';
     case InventoryLocationsManage = 'inventory.locations.manage';
+    /** Prepare / edit opening-stock drafts (initial stock before using the system). */
+    case InventoryOpeningManage = 'inventory.opening.manage';
+    /** Post opening stock (irreversible; creates opening_stock movements). */
+    case InventoryOpeningPost = 'inventory.opening.post';
+    /** Post opening-stock lines with an explicitly confirmed ZERO cost. */
+    case InventoryOpeningZeroCost = 'inventory.opening.zero_cost';
 
     // Trading partners
     case SuppliersView = 'suppliers.view';

@@ -181,3 +181,7 @@ options.
 
 Both are computed live on the Stock on hand page. There are no scheduled
 notifications yet.
+
+## Opening stock
+
+`opening_stock` is an inbound movement type for initial stock owned before go-live. It is posted at the confirmed opening cost and never creates purchasing records. See [opening-stock.md](opening-stock.md).

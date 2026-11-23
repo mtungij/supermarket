@@ -29,6 +29,8 @@ class DocumentNumberGenerator
 
     public const SALE_RETURN = 'sale_return';
 
+    public const OPENING_STOCK = 'opening_stock';
+
     private const PREFIXES = [
         self::PURCHASE_ORDER => 'PO',
         self::GOODS_RECEIPT => 'GRN',
@@ -36,6 +38,7 @@ class DocumentNumberGenerator
         self::TRANSFER => 'TRF',
         self::SALE => 'S',
         self::SALE_RETURN => 'RET',
+        self::OPENING_STOCK => 'OPS',
     ];
 
     public function nextNumber(Company $company, string $key): int

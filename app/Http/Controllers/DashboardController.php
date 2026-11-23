@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
 /**
  * Sends each user to the area matching who they are:
  * platform admins -> /platform, company-wide staff -> /company,
- * branch staff -> /branch.
+ * cashiers -> /pos, store keepers -> /inventory/stock, other branch
+ * staff -> /branch.
  */
 class DashboardController extends Controller
 {
@@ -31,6 +32,12 @@ class DashboardController extends Controller
         // POS. No shift screen exists.
         if (! $membership->all_branches && $user->can('pos.access') && ! $user->can('branches.view')) {
             return redirect()->route('pos');
+        }
+
+        // Branch staff whose job is stock only (store keepers: inventory but no
+        // POS and no reports) start in their inventory area.
+        if (! $membership->all_branches && $user->can('inventory.view') && ! $user->can('pos.access') && ! $user->can('reports.view')) {
+            return redirect()->route('inventory.stock');
         }
 
         return $membership->all_branches

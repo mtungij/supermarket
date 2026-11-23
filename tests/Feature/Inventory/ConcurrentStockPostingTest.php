@@ -9,12 +9,15 @@ use App\Exceptions\InvalidDocumentStateException;
 use App\Models\Branch;
 use App\Models\CompanyUser;
 use App\Models\GoodsReceipt;
+use App\Models\OpeningStock;
+use App\Models\OpeningStockRegistration;
 use App\Models\PaymentMethod;
 use App\Models\PosDevice;
 use App\Models\Sale;
 use App\Models\StockAdjustment;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Services\Inventory\OpeningStockService;
 use App\Services\Inventory\StockAdjustmentService;
 use App\Services\Pos\CheckoutService;
 use App\Services\Purchasing\GoodsReceiptService;
@@ -160,6 +163,41 @@ class ConcurrentStockPostingTest extends TestCase
     }
 
     /** Rebuilds auth + tenant context inside a child process. */
+    public function test_concurrent_opening_stock_posting_adds_stock_once(): void
+    {
+        $company = $this->createCompany();
+        $owner = $this->createOwner($company);
+        $this->actingAsTenant($owner, $company);
+        $branch = Branch::withoutTenancy()->where('company_id', $company->id)->where('is_head_office', true)->first();
+        $floor = $this->location($branch, LocationType::SalesFloor);
+        $soap = $this->makeProduct($company, $owner, ['name' => 'DRS MEDICATED']);
+        $rice = $this->makeProduct($company, $owner, ['name' => 'RICE']);
+        $service = app(OpeningStockService::class);
+        $header = ['branch_id' => $branch->id, 'location_id' => $floor->id, 'opening_date' => today()->toDateString()];
+        $line = fn ($p, $q) => ['product_id' => $p->id, 'product_unit_id' => $this->baseUnitOf($p)->id, 'quantity' => $q, 'unit_cost' => '500'];
+
+        // 1. the SAME document posted twice at the same moment (double click / retry)
+        $doc = $service->saveDraft($company, null, $header, [$line($soap, '20')], $owner);
+        $results = $this->race(2, fn () => app(OpeningStockService::class)
+            ->post(OpeningStock::forCompany($company)->findOrFail($doc->id), $this->asUser($owner->id, $company->id)));
+        sort($results);
+        $this->assertSame(['duplicate', 'ok'], $results);
+        $this->assertSame('20.0000', $this->onHand($floor, $soap));
+
+        // 2. two DIFFERENT drafts opening the same product at the same location
+        $this->actingAsTenant($owner, $company);
+        $a = $service->saveDraft($company, null, $header, [$line($rice, '10')], $owner);
+        $b = $service->saveDraft($company, null, $header, [$line($rice, '15')], $owner);
+        $ids = [$a->id, $b->id];
+        $results = $this->race(2, fn ($i) => app(OpeningStockService::class)
+            ->post(OpeningStock::forCompany($company)->findOrFail($ids[$i]), $this->asUser($owner->id, $company->id)));
+        sort($results);
+        $this->assertSame(['duplicate', 'ok'], $results);
+        $this->assertContains($this->onHand($floor, $rice), ['10.0000', '15.0000']);
+        $this->assertSame(2, StockMovement::forCompany($company)->count());
+        $this->assertSame(2, OpeningStockRegistration::forCompany($company)->count());
+    }
+
     private function asUser(int $userId, int $companyId): User
     {
         $user = User::query()->findOrFail($userId);

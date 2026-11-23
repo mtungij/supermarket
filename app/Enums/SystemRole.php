@@ -67,6 +67,7 @@ enum SystemRole: string
                 P::CategoriesManage, P::BrandsManage, P::UnitsManage,
                 P::InventoryView, P::InventoryAdjust, P::InventoryAdjustApprove,
                 P::InventoryTransfer, P::InventoryTransferReceive, P::InventoryLocationsManage,
+                P::InventoryOpeningManage, P::InventoryOpeningPost,
                 P::SuppliersView, P::SuppliersManage, P::CustomersView, P::CustomersManage,
                 P::SalesView, P::SalesCreate, P::SalesVoid, P::SalesRefund, P::SalesDiscount,
                 P::PurchasesView, P::PurchasesCreate, P::PurchasesApprove, P::PurchasesReceive, P::PurchasesQuickReceive,
@@ -92,6 +93,7 @@ enum SystemRole: string
                 P::BranchesView,
                 P::ProductsView, P::ProductsCreate, P::ProductsUpdate,
                 P::InventoryView, P::InventoryAdjust, P::InventoryTransfer, P::InventoryTransferReceive,
+                P::InventoryOpeningManage,
                 P::SuppliersView, P::PurchasesView, P::PurchasesCreate, P::PurchasesReceive,
             ],
 

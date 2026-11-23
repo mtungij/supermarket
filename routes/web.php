@@ -8,6 +8,7 @@ use App\Http\Controllers\Company\DashboardController as CompanyDashboardControll
 use App\Http\Controllers\Company\StaffController;
 use App\Http\Controllers\Company\SubscriptionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Inventory\OpeningStockTemplateController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\Platform\CompanyController as PlatformCompanyController;
 use App\Http\Controllers\Platform\DashboardController as PlatformDashboardController;
@@ -34,7 +35,11 @@ use Illuminate\Support\Facades\Route;
 | password reset, optional email verification) are registered by Fortify.
 */
 
-Route::get('/', fn () => auth()->check() ? redirect()->route('dashboard') : view('welcome'))->name('home');
+// The login page is the entry point: guests -> /login, signed-in users ->
+// their role-based area (DashboardController). The old landing page stays
+// public at /welcome.
+Route::get('/', fn () => auth()->check() ? redirect()->route('dashboard') : redirect()->route('login'))->name('home');
+Route::view('/welcome', 'welcome')->name('welcome');
 
 Route::post('/locale', LocaleController::class)->name('locale.update');
 
@@ -114,6 +119,12 @@ Route::middleware('auth')->group(function () {
             Route::get('/adjustments', Inventory\AdjustmentIndex::class)->name('adjustments');
             Route::get('/transfers', Inventory\TransferIndex::class)->name('transfers');
             Route::get('/locations', Inventory\LocationIndex::class)->name('locations');
+            // Opening stock: initial inventory owned before using the system (no PO/GRN/supplier).
+            Route::get('/opening-stock', Inventory\OpeningStockIndex::class)->name('opening-stock.index');
+            Route::get('/opening-stock/new', Inventory\OpeningStockForm::class)->name('opening-stock.create')->middleware('can:inventory.opening.manage');
+            Route::get('/opening-stock/import', Inventory\OpeningStockImport::class)->name('opening-stock.import')->middleware('can:inventory.opening.manage');
+            Route::get('/opening-stock/template.csv', OpeningStockTemplateController::class)->name('opening-stock.template');
+            Route::get('/opening-stock/{openingStock}', Inventory\OpeningStockForm::class)->name('opening-stock.show');
         });
     });
 });

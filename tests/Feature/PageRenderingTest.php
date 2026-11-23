@@ -16,7 +16,8 @@ class PageRenderingTest extends TestCase
 
     public function test_public_pages_render(): void
     {
-        $this->get('/')->assertOk()->assertSee('Register your supermarket');
+        $this->get('/')->assertRedirect(route('login'));
+        $this->get('/welcome')->assertOk()->assertSee('Register your supermarket');
         $this->get('/login')->assertOk();
         $this->get('/register')->assertOk();
         $this->get('/forgot-password')->assertOk();

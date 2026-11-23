@@ -7,6 +7,8 @@ use App\Http\Middleware\EnsureEmailIsVerifiedWhenEnabled;
 use App\Http\Middleware\ResolveTenantContext;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
+use App\Models\OpeningStock;
+use App\Models\OpeningStockLine;
 use App\Models\PurchaseOrder;
 use App\Models\Sale;
 use App\Models\SaleItemAllocation;
@@ -56,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
             'sale_item_allocation' => SaleItemAllocation::class,
             'sale_return' => SaleReturn::class,
             'sale_return_item' => SaleReturnItem::class,
+            'opening_stock' => OpeningStock::class,
+            'opening_stock_line' => OpeningStockLine::class,
         ]);
 
         // Livewire update requests re-run these middleware, so components

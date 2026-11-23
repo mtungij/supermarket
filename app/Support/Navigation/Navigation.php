@@ -74,6 +74,7 @@ class Navigation
             ['section' => 'Inventory', 'items' => [
                 ['label' => 'Stock on hand', 'route' => 'inventory.stock', 'icon' => 'box', 'can' => P::InventoryView],
                 ['label' => 'Stock movements', 'route' => 'inventory.movements', 'icon' => 'chart', 'can' => P::InventoryView],
+                ['label' => 'Opening stock', 'route' => 'inventory.opening-stock.index', 'match' => 'inventory.opening-stock.*', 'icon' => 'plus', 'can' => P::InventoryView],
                 ['label' => 'Adjustments', 'route' => 'inventory.adjustments', 'icon' => 'shield', 'can' => P::InventoryView],
                 ['label' => 'Transfers', 'route' => 'inventory.transfers', 'icon' => 'truck', 'can' => P::InventoryView],
                 ['label' => 'Stock locations', 'route' => 'inventory.locations', 'icon' => 'building', 'can' => P::InventoryView],

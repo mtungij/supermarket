@@ -2,7 +2,7 @@
 <x-layouts.base :title="$title">
     <div class="flex min-h-full flex-col">
         <header class="flex items-center justify-between px-4 py-4 sm:px-8">
-            <a href="{{ route('home') }}" class="flex items-center gap-2 text-lg font-semibold">
+            <a href="{{ route('login') }}" class="flex items-center gap-2 text-lg font-semibold">
                 <span class="grid size-10 place-items-center rounded-xl bg-brand-600 text-white"><x-icon name="store" /></span>
                 {{ config('app.name') }}
             </a>
