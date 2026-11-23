@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureEmailIsVerifiedWhenEnabled;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\ForceHttps;
 use App\Http\Middleware\ResolveTenantContext;
 use App\Http\Middleware\SetLocale;
 use App\Support\Tenancy\TenantViolationException;
@@ -19,6 +20,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Behind Traefik: trust X-Forwarded-Proto/For/Host/Port from the
+        // proxy network only (list: config app.trusted_proxies, applied in
+        // AppServiceProvider), so HTTPS and the real client IP are seen.
+        $middleware->trustProxies(headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST
+            | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO);
+
+        // https:// URLs, Secure cookies and HSTS in production (before sessions start).
+        $middleware->prepend(ForceHttps::class);
+
         $middleware->web(append: [
             EnsureUserIsActive::class,
             SetLocale::class,

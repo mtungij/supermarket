@@ -24,6 +24,7 @@ use App\View\Composers\AppLayoutComposer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -40,6 +41,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Reverse proxies (Traefik) whose X-Forwarded-* headers are trusted.
+        TrustProxies::at(array_values(array_filter(array_map('trim', explode(',', (string) config('app.trusted_proxies'))))));
+
         $this->registerSchemaMacros();
 
         PermissionGates::register();

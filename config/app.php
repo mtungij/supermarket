@@ -55,6 +55,23 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+    | Behind a TLS-terminating reverse proxy (Traefik) the app itself is
+    | reached over plain HTTP. When this is true every generated URL (form
+    | actions, redirects, assets) uses https:// and APP_URL as the root,
+    | cookies are marked Secure and HSTS is sent on HTTPS responses.
+    | Defaults to on in production when APP_URL is https://.
+    */
+    'force_https' => (bool) env('FORCE_HTTPS', env('APP_ENV') === 'production' && str_starts_with((string) env('APP_URL', ''), 'https://')),
+
+    /*
+    | Reverse proxies whose X-Forwarded-* headers are trusted (comma
+    | separated IPs / CIDR ranges). Default: private networks, i.e. the
+    | Docker network Traefik talks to the app on. Never use "*" if the
+    | app container is reachable directly from the internet.
+    */
+    'trusted_proxies' => env('TRUSTED_PROXIES', '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1,fc00::/7'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

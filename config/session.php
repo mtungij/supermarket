@@ -169,7 +169,9 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // Secure cookies whenever the site runs on https:// (FORCE_HTTPS also
+    // switches this on per request; see App\Http\Middleware\ForceHttps).
+    'secure' => env('SESSION_SECURE_COOKIE', str_starts_with((string) env('APP_URL', ''), 'https://') ? true : null),
 
     /*
     |--------------------------------------------------------------------------
