@@ -19,8 +19,7 @@ use Illuminate\View\View;
  *  - roll           generic 50x30 mm label roll
  *  - thermal-70x37  thermal gap labels 70 x 37 mm (e.g. ROMESON ZJ80UEB,
  *                   74 mm media, 2 mm gap): one label per printed page,
- *
- *                   @page sized to the sticker, margin 0, no browser
+ *                   CSS page size = the sticker, margin 0, no browser
  *                   header/footer, barcode at an exact physical size
  *  - thermal-37x70  the same label rotated 90 degrees, for printers/drivers
  *                   that feed the roll the other way round
