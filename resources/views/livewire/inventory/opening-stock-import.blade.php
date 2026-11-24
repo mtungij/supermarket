@@ -86,7 +86,7 @@
                         <td class="px-4 py-2 text-right tabular-nums">{{ $p['quantity'] }} {{ __($p['unit'] ?? '') }}</td>
                         <td class="px-4 py-2 text-right tabular-nums">{{ $p['unit_cost'] }}</td>
                         <td class="px-4 py-2">{{ $p['batch'] ?: '—' }}@if ($p['expires_on']) · {{ $p['expires_on'] }}@endif</td>
-                        <td class="px-4 py-2">@if ($p['error'])<span class="text-red-700 dark:text-red-300">{{ $p['error'] }}</span>@else<span class="text-brand-700 dark:text-brand-100">✓ {{ __('OK') }}</span>@endif</td>
+                        <td class="px-4 py-2">@if ($p['error'])<span class="text-red-700 dark:text-red-300">{{ $p['error'] }}</span>@else<span class="text-brand-700 dark:text-brand-100">✓ {{ ($p['type'] ?? '') === 'additional' ? __('Additional stock in') : __('Opening stock') }}</span>@endif</td>
                     </tr>
                 @endforeach
             </x-ui.table>

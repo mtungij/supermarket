@@ -59,7 +59,7 @@ class SubscriptionAndWorkflowUiTest extends TestCase
             ->assertHasNoErrors()
             ->assertRedirect();
 
-        $this->assertSame('72.0000', $this->onHand($this->location($this->headOffice($company), LocationType::ReceivingArea), $juice));
+        $this->assertSame('72.0000', $this->onHand($this->location($this->headOffice($company), LocationType::SalesFloor), $juice));   // default destination
         $this->assertSame('partially_received', $order->fresh()->status->value);
         $this->actingAs($owner)->get(route('inventory.stock'))->assertSee('72 Piece');
     }

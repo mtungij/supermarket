@@ -48,9 +48,10 @@ class ReceivePurchaseTest extends TestCase
         return [$company, $owner, $order, $juice, $carton, $rice];
     }
 
+    /** The DEFAULT receiving destination: the branch's Sales Floor (by location type). */
     private function receiving(Company $company): StockLocation
     {
-        return $this->location($this->headOffice($company), LocationType::ReceivingArea);
+        return $this->location($this->headOffice($company), LocationType::SalesFloor);
     }
 
     public function test_receive_all_fills_outstanding_quantities_and_posts(): void
@@ -59,6 +60,7 @@ class ReceivePurchaseTest extends TestCase
 
         Livewire::test(GoodsReceiptForm::class, ['order' => $order])
             ->assertSet('lines.0.quantity', '')
+            ->assertSet('defaultLocation', $this->receiving($company)->uuid)   // Sales Floor preselected
             ->call('receiveAll')
             ->assertSet('lines.0.quantity', '2')
             ->assertSet('lines.1.quantity', '20')

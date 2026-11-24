@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Authorization\PermissionGates;
 use App\Http\Middleware\EnsureEmailIsVerifiedWhenEnabled;
 use App\Http\Middleware\ResolveTenantContext;
+use App\Models\CompanyUser;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptLine;
 use App\Models\OpeningStock;
@@ -64,6 +65,7 @@ class AppServiceProvider extends ServiceProvider
             'sale_return_item' => SaleReturnItem::class,
             'opening_stock' => OpeningStock::class,
             'opening_stock_line' => OpeningStockLine::class,
+            'company_user' => CompanyUser::class,
         ]);
 
         // Livewire update requests re-run these middleware, so components

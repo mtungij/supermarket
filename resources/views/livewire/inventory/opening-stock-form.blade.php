@@ -58,78 +58,112 @@
                 </x-ui.field>
             </section>
 
-            <section class="card space-y-4" aria-label="{{ __('Products') }}">
-                @include('livewire.partials.product-picker')
+            <section class="card space-y-4" aria-labelledby="os-products">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h3 id="os-products" class="font-semibold">{{ __('Products') }} @if ($lines)<span class="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-700">{{ count($lines) }}</span>@endif</h3>
+                    @include('livewire.partials.product-multi-picker')
+                </div>
+                <details class="rounded-xl border border-slate-200 p-3 dark:border-slate-700" @if ($lines === []) open @endif>
+                    <summary class="cursor-pointer text-sm font-medium text-slate-600 dark:text-slate-300">{{ __('Scan a barcode instead') }}</summary>
+                    <div class="mt-3">@include('livewire.partials.product-picker')</div>
+                </details>
                 @error('lines') <p class="form-error">{{ $message }}</p> @enderror
 
-                <div class="space-y-3">
-                    @forelse ($lines as $i => $line)
-                        @php($p = $products[$line['product_id']] ?? null)
-                        <div wire:key="osl-{{ $i }}" class="rounded-xl border border-slate-200 p-3 sm:p-4 dark:border-slate-700 @error("lines.$i.product_id") border-red-400 dark:border-red-700 @enderror" data-opening-line>
-                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                <div class="min-w-0">
+                @if ($lines === [])
+                    <div class="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-slate-500 dark:border-slate-600">{{ __('Use "Select products" to add several products at once, or scan a barcode.') }}</div>
+                @else
+                    {{-- One markup: a labelled card on phones, a table row on desktop (sticky header). --}}
+                    <div class="xl:max-h-[70vh] xl:overflow-auto xl:rounded-xl xl:border xl:border-slate-200 dark:xl:border-slate-700" data-lines-table>
+                        <div class="sticky top-0 z-10 hidden gap-2 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-500 xl:grid xl:grid-cols-[minmax(0,1fr)_7.5rem_5.5rem_8.5rem_8.5rem_7rem_2.75rem] dark:bg-slate-800" aria-hidden="true">
+                            <span>{{ __('Product') }} / {{ __('In stock here') }}</span><span>{{ __('Unit') }}</span><span>{{ __('Quantity') }}</span>
+                            <span>{{ __('Cost per unit') }} *</span><span>{{ __('New selling') }}</span><span class="text-right">{{ __('Value') }}</span><span></span>
+                        </div>
+                        <div class="space-y-3 xl:space-y-0 xl:divide-y xl:divide-slate-100 dark:xl:divide-slate-700">
+                        @foreach ($lines as $i => $line)
+                            @php($p = $products[$line['product_id']] ?? null)
+                            @php($r = $rows[$i])
+                            <div wire:key="osl-{{ $i }}-{{ $line['product_id'] }}" class="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 p-3 xl:items-start xl:gap-2 xl:rounded-none xl:border-0 xl:px-3 xl:py-2 xl:grid-cols-[minmax(0,1fr)_7.5rem_5.5rem_8.5rem_8.5rem_7rem_2.75rem] dark:border-slate-700 @error("lines.$i.product_id") border-red-400 dark:border-red-700 @enderror" data-opening-line>
+                                <div class="col-span-2 min-w-0 xl:col-span-1">
                                     <p class="font-semibold [overflow-wrap:anywhere]">{{ $p?->name }}</p>
-                                    <p class="text-xs text-slate-500">{{ $p?->sku }}@if ($p?->requiresBatch()) · {{ $p->track_batches ? __('Batch tracked') : __('Expiry tracked') }}@endif</p>
+                                    <p class="text-xs text-slate-500 [overflow-wrap:anywhere]">{{ $p?->sku }}@if ($p?->barcodes->first()) · {{ $p->barcodes->first()->barcode }}@endif @if ($p?->requiresBatch()) · {{ $p->track_batches ? __('Batch tracked') : __('Expiry tracked') }}@endif</p>
+                                    <p class="text-xs text-slate-600 dark:text-slate-300">{{ __('In stock here') }}: <span class="tabular-nums" data-existing-stock>{{ $r['stock'] }}</span> {{ __($p?->baseUnit?->name ?? '') }}</p>
+                                    @if ($r['type'] === 'additional')
+                                        <p class="mt-1"><span class="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" title="{{ $r['type_reason'] }}" data-line-type="additional">{{ __('Additional stock in') }}</span>
+                                            <span class="block text-[11px] text-slate-500">{{ __('Added on top of the existing stock (not opening stock).') }}</span></p>
+                                    @else
+                                        <p class="mt-1"><span class="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-900 dark:bg-brand-900/40 dark:text-brand-100" data-line-type="opening">{{ __('Opening stock') }}</span></p>
+                                    @endif
                                 </div>
-                                <p class="text-right text-sm"><span class="text-slate-500">{{ __('Value') }}</span><br><span class="font-semibold tabular-nums">{{ $rows[$i]['value'] !== null ? Decimal::format($rows[$i]['value']) : '—' }}</span></p>
-                            </div>
-                            @error("lines.$i.product_id") <p class="form-error">{{ $message }}</p> @enderror
-                            <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
                                 <div>
-                                    <label for="osl-unit-{{ $i }}" class="form-label">{{ __('Unit') }}</label>
+                                    <label for="osl-unit-{{ $i }}" class="form-label xl:sr-only">{{ __('Unit') }}</label>
                                     <select id="osl-unit-{{ $i }}" wire:model.live="lines.{{ $i }}.product_unit_id" class="form-input">@foreach ($this->unitsFor($line['product_id']) as $u) <option value="{{ $u->id }}">{{ __($u->unit->name) }}{{ $u->is_base ? '' : ' ('.Decimal::trim($u->factor).')' }}</option> @endforeach</select>
                                     @error("lines.$i.product_unit_id") <p class="form-error">{{ $message }}</p> @enderror
                                 </div>
                                 <div>
-                                    <label for="osl-qty-{{ $i }}" class="form-label">{{ __('Quantity') }}</label>
+                                    <label for="osl-qty-{{ $i }}" class="form-label xl:sr-only">{{ __('Quantity') }}</label>
                                     <input id="osl-qty-{{ $i }}" type="text" inputmode="decimal" wire:model.live.debounce.500ms="lines.{{ $i }}.quantity" class="form-input tabular-nums">
                                     @error("lines.$i.quantity") <p class="form-error">{{ $message }}</p> @enderror
                                 </div>
-                                <div class="col-span-2 md:col-span-2">
-                                    <label for="osl-cost-{{ $i }}" class="form-label">{{ __('Cost per unit') }} *</label>
-                                    <input id="osl-cost-{{ $i }}" type="text" inputmode="decimal" wire:model.live.debounce.500ms="lines.{{ $i }}.unit_cost" class="form-input tabular-nums" placeholder="{{ __('Enter cost') }}">
-                                    @if ($p?->reference_buying_price !== null && $line['unit_cost'] === '')
-                                        <p class="mt-1 text-xs text-slate-500">{{ __('Reference buying price: :price per :unit', ['price' => Decimal::format($p->reference_buying_price), 'unit' => __($p->baseUnit->name)]) }}
-                                            <button type="button" wire:click="useReferenceCost({{ $i }})" class="ml-1 inline-flex min-h-10 items-center font-semibold text-brand-700 underline dark:text-brand-100">{{ __('Use it') }}</button></p>
-                                    @endif
+                                <div>
+                                    <label for="osl-cost-{{ $i }}" class="form-label xl:sr-only">{{ __('Cost per unit') }} *</label>
+                                    <div class="relative"><span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500">{{ $currency }}</span>
+                                    <input id="osl-cost-{{ $i }}" type="text" inputmode="decimal" wire:model.live.debounce.500ms="lines.{{ $i }}.unit_cost" class="form-input pl-10 tabular-nums" placeholder="{{ __('Enter cost') }}"></div>
+                                    <p class="mt-0.5 text-[11px] text-slate-500">/ {{ $r['unit_name'] }}</p>
+                                    @if ($r['buying'] !== null)<p class="text-[11px] text-slate-500">{{ match ($r['buying_source']) { 'average' => __('Suggested: current average cost'), 'last' => __('Suggested: last purchase cost'), 'reference' => __('Suggested: reference buying price'), default => '' } }} ({{ Decimal::format($r['buying']) }})</p>@endif
                                     @error("lines.$i.unit_cost") <p class="form-error">{{ $message }}</p> @enderror
-                                    @if ($rows[$i]['zero'])
-                                        <label class="mt-2 flex min-h-10 items-start gap-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                                            <input type="checkbox" wire:model.live="lines.{{ $i }}.zero_cost_confirmed" class="mt-0.5 size-5 rounded border-slate-300 text-amber-600">
-                                            <span>{{ __('I confirm this stock has no cost (e.g. free samples). A manager allowed to approve zero cost must post it.') }}</span>
-                                        </label>
-                                    @endif
                                 </div>
+                                <div>
+                                    <label for="osl-price-{{ $i }}" class="form-label xl:sr-only">{{ __('New selling price (optional)') }}</label>
+                                    <div class="relative"><span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500">{{ $currency }}</span>
+                                    <input id="osl-price-{{ $i }}" type="text" inputmode="decimal" wire:model.blur="lines.{{ $i }}.proposed_selling_price" class="form-input pl-10 tabular-nums" placeholder="{{ __('No change') }}" @disabled(! $r['sellable'])>
+                                    </div>
+                                    <p class="mt-0.5 text-[11px] text-slate-500">/ {{ $r['unit_name'] }} · {{ __('Now') }}: <span class="tabular-nums">{{ $r['selling'] !== null ? Decimal::format($r['selling']) : '—' }}</span></p>
+                                    @error("lines.$i.proposed_selling_price") <p class="form-error">{{ $message }}</p> @enderror
+                                </div>
+                                <div class="text-sm xl:pt-2.5 xl:text-right"><span class="text-xs text-slate-500 xl:hidden">{{ __('Value') }}: </span><span class="font-semibold tabular-nums">{{ $r['value'] !== null ? Decimal::format($r['value']) : '—' }}</span><span class="block text-[11px] text-slate-400">= {{ Decimal::trim(Decimal::round($r['qty_base'], Decimal::QTY)) }} {{ __($p?->baseUnit?->name ?? '') }}</span></div>
+                                <div class="col-span-2 flex justify-end gap-1 xl:col-span-1">
+                                    @if ($p?->requiresBatch())<button type="button" wire:click="addLot({{ $i }})" class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 xl:hidden dark:text-brand-100 dark:hover:bg-brand-900/30">+ {{ __('Another batch') }}</button>@endif
+                                    <button type="button" wire:click="removeLine({{ $i }})" class="grid size-10 place-items-center rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40" aria-label="{{ __('Remove') }} {{ $p?->name }}"><x-icon name="x" /></button>
+                                </div>
+
+                                @error("lines.$i.product_id") <p class="form-error col-span-2 xl:col-span-full">{{ $message }}</p> @enderror
+                                @if ($r['zero'])
+                                    <label class="col-span-2 flex min-h-10 items-start gap-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900 xl:col-span-full dark:bg-amber-950/40 dark:text-amber-200">
+                                        <input type="checkbox" wire:model.live="lines.{{ $i }}.zero_cost_confirmed" class="mt-0.5 size-5 rounded border-slate-300 text-amber-600">
+                                        <span>{{ __('I confirm this stock has no cost (e.g. free samples). A manager allowed to approve zero cost must post it.') }}</span>
+                                    </label>
+                                @endif
                                 @if ($p?->requiresBatch())
-                                    <div class="col-span-2 md:col-span-1">
-                                        <label for="osl-batch-{{ $i }}" class="form-label">{{ __('Batch number') }}{{ $p->track_batches ? ' *' : '' }}</label>
-                                        <input id="osl-batch-{{ $i }}" type="text" wire:model="lines.{{ $i }}.batch_number" class="form-input uppercase" autocomplete="off" x-on:keydown.enter.prevent>
-                                        @error("lines.$i.batch_number") <p class="form-error">{{ $message }}</p> @enderror
-                                    </div>
-                                    <div>
-                                        <label for="osl-mfd-{{ $i }}" class="form-label">{{ __('Manufactured') }}</label>
-                                        <input id="osl-mfd-{{ $i }}" type="date" wire:model="lines.{{ $i }}.manufactured_on" class="form-input">
-                                        @error("lines.$i.manufactured_on") <p class="form-error">{{ $message }}</p> @enderror
-                                    </div>
-                                    <div>
-                                        <label for="osl-exp-{{ $i }}" class="form-label">{{ __('Expiry date') }}{{ $p->track_expiry ? ' *' : '' }}</label>
-                                        <input id="osl-exp-{{ $i }}" type="date" wire:model="lines.{{ $i }}.expires_on" class="form-input">
-                                        @error("lines.$i.expires_on") <p class="form-error">{{ $message }}</p> @enderror
+                                    <div class="col-span-2 grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-2 sm:grid-cols-3 xl:col-span-full xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-end dark:bg-slate-800/60">
+                                        <div class="col-span-2 sm:col-span-1 xl:col-span-1">
+                                            <label for="osl-batch-{{ $i }}" class="form-label">{{ __('Batch number') }}{{ $p->track_batches ? ' *' : '' }}</label>
+                                            <input id="osl-batch-{{ $i }}" type="text" wire:model="lines.{{ $i }}.batch_number" class="form-input uppercase" autocomplete="off" x-on:keydown.enter.prevent>
+                                            @error("lines.$i.batch_number") <p class="form-error">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label for="osl-mfd-{{ $i }}" class="form-label">{{ __('Manufactured') }}</label>
+                                            <input id="osl-mfd-{{ $i }}" type="date" wire:model="lines.{{ $i }}.manufactured_on" class="form-input">
+                                            @error("lines.$i.manufactured_on") <p class="form-error">{{ $message }}</p> @enderror
+                                        </div>
+                                        <div>
+                                            <label for="osl-exp-{{ $i }}" class="form-label">{{ __('Expiry date') }}{{ $p->track_expiry ? ' *' : '' }}</label>
+                                            <input id="osl-exp-{{ $i }}" type="date" wire:model="lines.{{ $i }}.expires_on" class="form-input">
+                                            @error("lines.$i.expires_on") <p class="form-error">{{ $message }}</p> @enderror
+                                        </div>
+                                        <button type="button" wire:click="addLot({{ $i }})" class="hidden min-h-10 items-center rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 xl:inline-flex dark:text-brand-100 dark:hover:bg-brand-900/30">+ {{ __('Another batch') }}</button>
                                     </div>
                                 @endif
                             </div>
-                            <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-                                <span>= {{ Decimal::trim(Decimal::round($rows[$i]['qty_base'], Decimal::QTY)) }} {{ __($p?->baseUnit?->name ?? '') }}</span>
-                                <span class="flex gap-1">
-                                    @if ($p?->requiresBatch())<button type="button" wire:click="addLot({{ $i }})" class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-100 dark:hover:bg-brand-900/30">+ {{ __('Another batch') }}</button>@endif
-                                    <button type="button" wire:click="removeLine({{ $i }})" class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">{{ __('Remove') }}</button>
-                                </span>
-                            </div>
+                        @endforeach
                         </div>
-                    @empty
-                        <div class="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-slate-500 dark:border-slate-600">{{ __('Scan a barcode or search a product to add your existing stock.') }}</div>
-                    @endforelse
-                </div>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-slate-200 pt-3 text-sm dark:border-slate-700" data-lines-footer>
+                        <span>{{ __('Products') }}: <strong>{{ $summary['products'] }}</strong></span>
+                        <span>{{ __('Total quantity') }}: <strong class="tabular-nums">{{ Decimal::trim(Decimal::round($summary['quantity'], Decimal::QTY)) }}</strong></span>
+                        <span>{{ __('Opening value') }}: <strong class="tabular-nums">{{ $currency }} {{ Decimal::format($summary['value']) }}</strong></span>
+                    </div>
+                    <p class="text-xs text-slate-500">{{ __('Cost and selling price are prefilled and can be edited. Catalogue selling prices change only if you tick the confirmation when posting, and only where the price really changes.') }}</p>
+                @endif
             </section>
 
             @if ($anyZero)
@@ -176,6 +210,7 @@
         <x-ui.table>
             <x-slot:head>
                 <th class="px-4 py-3">{{ __('Product') }}</th>
+                <th class="px-4 py-3">{{ __('Type') }}</th>
                 <th class="px-4 py-3 text-right">{{ __('Quantity') }}</th>
                 <th class="px-4 py-3 text-right">{{ __('Cost per unit') }}</th>
                 <th class="px-4 py-3 text-right">{{ __('Base quantity') }}</th>
@@ -186,6 +221,7 @@
             @foreach ($postedLines as $l)
                 <tr wire:key="pl-{{ $l->id }}">
                     <td class="px-4 py-3"><span class="font-medium">{{ $l->product->name }}</span><span class="block text-xs text-slate-500">{{ $l->product->sku }}@if ($l->zero_cost_confirmed) · {{ __('zero cost') }}@endif</span></td>
+                    <td class="px-4 py-3">{{ $l->line_type === 'additional' ? __('Additional stock in') : __('Opening stock') }}</td>
                     <td class="px-4 py-3 text-right tabular-nums">{{ Decimal::trim($l->quantity) }} {{ __($l->productUnit->unit->name) }}</td>
                     <td class="px-4 py-3 text-right tabular-nums">{{ Decimal::format($l->unit_cost, 2) }}</td>
                     <td class="px-4 py-3 text-right tabular-nums">{{ Decimal::trim($l->quantity_base) }} {{ __($l->product->baseUnit->name) }}</td>
@@ -227,6 +263,27 @@
                 </dl>
                 @if (! $confirmation['sellable'])<p class="mt-3 text-sm text-slate-600 dark:text-slate-300">{{ __('This location is not sellable: transfer the stock to the sales floor before the POS can sell it.') }}</p>@endif
                 @if ($confirmation['zero_cost_lines'] > 0)<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{{ __(':n lines have zero cost (approved by you).', ['n' => $confirmation['zero_cost_lines']]) }}</p>@endif
+                @if (($confirmation['additional_lines'] ?? 0) > 0)
+                    <p class="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:bg-sky-950/40 dark:text-sky-100" data-additional-note>{{ __(':n lines are Additional stock in: they are added on top of the stock already there and recorded as "Additional stock in", not as opening stock.', ['n' => $confirmation['additional_lines']]) }}</p>
+                @endif
+                @if (($confirmation['price_changes'] ?? []) !== [])
+                    <div class="mt-3 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700" data-price-changes>
+                        <p class="font-semibold">{{ __('Proposed new selling prices') }}</p>
+                        <ul class="mt-1 space-y-0.5">
+                            @foreach ($confirmation['price_changes'] as $c)
+                                <li class="flex justify-between gap-3"><span class="[overflow-wrap:anywhere]">{{ $c['product'] }} <span class="text-xs text-slate-500">/ {{ $c['unit'] }}</span></span><span class="shrink-0 tabular-nums">{{ Decimal::format($c['from']) }} → <strong>{{ Decimal::format($c['to']) }}</strong></span></li>
+                            @endforeach
+                        </ul>
+                        @if ($confirmation['can_change_prices'])
+                            <label class="mt-2 flex min-h-11 items-start gap-2 rounded-lg bg-amber-50 p-2 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                                <input type="checkbox" wire:model="applyPrices" class="mt-0.5 size-5 rounded border-slate-300 accent-amber-600" data-apply-prices>
+                                <span>{{ __('Also update these catalogue selling prices (all branches, from now on). Leave unticked to post the stock only.') }}</span>
+                            </label>
+                        @else
+                            <p class="mt-2 text-xs text-slate-500">{{ __('You cannot change selling prices: only the stock will be posted. The proposals stay on this document.') }}</p>
+                        @endif
+                    </div>
+                @endif
             @endif
             @if ($errors->any())
                 <div class="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert" data-post-error>

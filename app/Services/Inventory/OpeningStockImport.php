@@ -179,10 +179,13 @@ class OpeningStockImport
         }
         ksort($errors);
 
+        // classification per row, even when other rows have errors
+        $blockedIds = $candidates === [] ? [] : $this->service->ineligibility($location, array_values(array_unique(array_column($candidates, 'product_id'))));
+        $types = array_map(fn ($c) => isset($blockedIds[$c['product_id']]) ? 'additional' : 'opening', array_column($candidates, null, 'import_row'));
         foreach (array_slice($candidates, 0, 200) as $c) {
             $preview[] = ['row' => $c['import_row'], 'name' => $c['_name'], 'unit' => $c['_unit'], 'quantity' => $c['quantity'],
                 'unit_cost' => $c['unit_cost'], 'batch' => $c['batch_number'], 'expires_on' => $c['expires_on'],
-                'error' => $errors[$c['import_row']][0] ?? null];
+                'error' => $errors[$c['import_row']][0] ?? null, 'type' => $types[$c['import_row']] ?? null];
         }
 
         return [
@@ -196,6 +199,7 @@ class OpeningStockImport
                 'quantity' => array_reduce($lines, fn ($c, $l) => Decimal::add($c, $l['quantity_base'], Decimal::QTY), '0'),
                 'value' => array_reduce($lines, fn ($c, $l) => Decimal::add($c, $l['line_value'], Decimal::COST), '0'),
                 'zero_cost_rows' => $zeroRows,
+                'additional_rows' => count(array_filter($lines, fn ($l) => $l['line_type'] === 'additional')),
             ],
         ];
     }

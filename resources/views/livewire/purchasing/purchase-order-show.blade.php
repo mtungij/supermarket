@@ -36,6 +36,35 @@
         <tr class="bg-slate-50 font-medium dark:bg-slate-800"><td colspan="4" class="px-4 py-3 text-right">{{ __('Subtotal') }} {{ Decimal::format($order->subtotal) }} · {{ __('Discount') }} {{ Decimal::format($order->discount_total) }} · {{ __('Tax') }} {{ Decimal::format($order->tax_total) }}</td><td colspan="3" class="px-4 py-3 text-right">{{ __('Total') }} {{ $order->currency }} {{ Decimal::format($order->total) }}</td></tr>
     </x-ui.table>
 
+    @if ($proposals->isNotEmpty())
+        <section class="card" data-proposed-prices>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h3 class="font-semibold">{{ __('Proposed selling prices') }}</h3>
+                    <p class="text-sm text-slate-500">{{ __('Recorded with this purchase. Catalogue prices change only when you apply them.') }}</p>
+                </div>
+                @if ($can['prices'] && $pendingProposals > 0)
+                    <button type="button" wire:click="$set('confirmingPrices', true)" class="btn btn-primary" data-apply-prices aria-haspopup="dialog">{{ __('Update selling prices') }} ({{ $pendingProposals }})</button>
+                @endif
+            </div>
+            <ul class="mt-3 divide-y divide-slate-100 text-sm dark:divide-slate-700">
+                @foreach ($proposals as $pp)
+                    <li class="flex flex-wrap items-center justify-between gap-2 py-2">
+                        <span class="font-medium">{{ $pp['line']->product->name }} <span class="text-xs font-normal text-slate-500">/ {{ __($pp['line']->productUnit->unit->name) }}</span></span>
+                        <span class="tabular-nums">{{ Decimal::format($pp['current']) }} → <strong>{{ Decimal::format($pp['line']->proposed_selling_price) }}</strong>
+                            @if ($pp['line']->selling_price_applied_at)<span class="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-800 dark:bg-brand-900/50 dark:text-brand-100">{{ __('Applied') }}</span>@endif</span>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+        @if ($can['prices'])
+            <x-ui.confirm-dialog wire:model="confirmingPrices" confirm="applyPrices" return-focus="[data-apply-prices]"
+                :title="__('Update catalogue selling prices?')"
+                :description="__(':n products will get a new selling price from now on, in every branch. Past sales keep their prices.', ['n' => $pendingProposals])"
+                :confirm-label="__('Update prices')" :busy-label="__('Updating…')" />
+        @endif
+    @endif
+
     @if ($can['cancel'] || $can['close'] || $can['approve'])
         <section class="card flex flex-col gap-3 md:flex-row md:items-end">
             <x-ui.field class="flex-1" :label="__('Reason (for reject, cancel or close)')" for="po-reason" error="reason"><input id="po-reason" type="text" wire:model="reason" class="form-input"></x-ui.field>

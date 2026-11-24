@@ -16,6 +16,7 @@ use App\Models\ProductUnit;
 use App\Models\StockLocation;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Services\Catalogue\PriceService;
 use App\Services\Catalogue\UnitConversionService;
 use App\Services\Support\Authorizer;
 use App\Services\Support\DocumentNumberGenerator;
@@ -140,11 +141,9 @@ class OpeningStockService
 
                 continue;
             }
-            if (isset($blocked[$product->id])) {
-                $errors["{$f}.product_id"] = $product->name.' '.$blocked[$product->id];
-
-                continue;
-            }
+            // Already opened here / already trading in this branch: never a second
+            // opening balance - the line becomes "Additional stock in" instead.
+            $lineType = isset($blocked[$product->id]) ? 'additional' : 'opening';
 
             $unit = $units[(int) ($line['product_unit_id'] ?? 0)] ?? null;
             if ($unit === null || $unit->product_id !== $product->id || ! $unit->is_active) {
@@ -183,6 +182,21 @@ class OpeningStockService
                 $errors["{$f}.unit_cost"] = __('Cost is zero: enter the real cost, or confirm that this stock has no cost.');
 
                 continue;
+            }
+
+            // optional proposed catalogue price (per this unit) - recorded only
+            $proposed = trim(str_replace(',', '', (string) ($line['proposed_selling_price'] ?? '')));
+            if ($proposed !== '') {
+                if (! Decimal::isValid($proposed) || ! Decimal::isPositive($proposed) || Decimal::scaleOf($proposed) > Decimal::MONEY) {
+                    $errors["{$f}.proposed_selling_price"] = __('Enter a valid selling price (more than zero, up to 2 decimals).');
+
+                    continue;
+                }
+                if (! $unit->can_sell) {
+                    $errors["{$f}.proposed_selling_price"] = __('This unit is not sold, so it has no selling price.');
+
+                    continue;
+                }
             }
 
             // lots
@@ -241,6 +255,8 @@ class OpeningStockService
                 'zero_cost_confirmed' => $zero, 'batch_number' => $batch ?: null,
                 'manufactured_on' => $made?->toDateString(), 'expires_on' => $expires?->toDateString(),
                 'import_row' => $line['import_row'] ?? null,
+                'proposed_selling_price' => $proposed !== '' ? Decimal::normalize($proposed, Decimal::MONEY) : null,
+                'line_type' => $lineType,
             ];
         }
 
@@ -365,7 +381,33 @@ class OpeningStockService
             'quantity' => array_reduce($prepared, fn ($c, $l) => Decimal::add($c, $l['quantity_base'], Decimal::QTY), '0'),
             'value' => array_reduce($prepared, fn ($c, $l) => Decimal::add($c, $l['line_value'], Decimal::COST), '0'),
             'zero_cost_lines' => $zero,
+            'additional_lines' => count(array_filter($prepared, fn ($l) => $l['line_type'] === 'additional')),
+            'price_changes' => $this->priceChanges($company, $branch, $prepared),
+            'can_change_prices' => $this->authorizer->can($actor, 'products.prices.manage'),
         ];
+    }
+
+    /**
+     * Proposed prices that differ from the CURRENT company-wide price.
+     *
+     * @return list<array{product: string, unit: string, from: string, to: string}>
+     */
+    private function priceChanges(Company $company, Branch $branch, array $lines): array
+    {
+        $changes = [];
+        foreach ($lines as $l) {
+            if (($l['proposed_selling_price'] ?? null) === null) {
+                continue;
+            }
+            $product = Product::forCompany($company)->find($l['product_id']);
+            $unit = ProductUnit::forCompany($company)->with('unit')->find($l['product_unit_id']);
+            $current = app(PriceService::class)->resolve($product, $unit)->price;
+            if (Decimal::cmp($current, $l['proposed_selling_price']) !== 0) {
+                $changes[] = ['product' => $product->name, 'unit' => __($unit->unit->name), 'from' => $current, 'to' => $l['proposed_selling_price']];
+            }
+        }
+
+        return $changes;
     }
 
     public function cancel(OpeningStock $draft, User $actor): OpeningStock
@@ -390,11 +432,14 @@ class OpeningStockService
      * scope is registered under a UNIQUE index, and StockLedger refuses a
      * second movement for the same source line.
      */
-    public function post(OpeningStock $document, User $actor): OpeningStock
+    public function post(OpeningStock $document, User $actor, bool $applyPrices = false): OpeningStock
     {
         $this->authorizer->permission($actor, 'inventory.opening.post');
+        if ($applyPrices) {
+            $this->authorizer->permission($actor, 'products.prices.manage');
+        }
 
-        return DB::transaction(function () use ($document, $actor) {
+        return DB::transaction(function () use ($document, $actor, $applyPrices) {
             $document = $this->lockDraft($document, posting: true);
             $this->authorizer->branch($actor, $document->branch_id);
             $company = Company::query()->findOrFail($document->company_id);
@@ -425,14 +470,20 @@ class OpeningStockService
             foreach ($productIds as $id) {
                 $this->ledger->lockBranchProduct($company->id, $document->branch_id, $id);
             }
-            $blocked = $this->ineligibility($location, $productIds, lock: true);
+            // Opening lines must STILL be first-time stock (checked under lock). If one
+            // became ineligible since the draft was saved we stop instead of silently
+            // re-classifying it: saving the draft again turns it into Additional stock in.
+            $openingIds = $lines->where('line_type', '!=', 'additional')->pluck('product_id')->unique()->sort()->values()->all();
+            $blocked = $this->ineligibility($location, $openingIds, lock: true);
             if ($blocked !== []) {
                 $id = array_key_first($blocked);
-                throw InvalidDocumentStateException::make('lines', Product::forCompany($company)->whereKey($id)->value('name').' '.$blocked[$id]);
+                throw InvalidDocumentStateException::make('lines', Product::forCompany($company)->whereKey($id)->value('name').' '.$blocked[$id]
+                    .' '.__('Save the draft again: it will be entered as Additional stock in.'));
             }
+            $productIds = $openingIds;   // only opening products are registered below
 
             try {
-                OpeningStockRegistration::query()->insert(array_map(fn ($id) => [
+                $productIds === [] ?: OpeningStockRegistration::query()->insert(array_map(fn ($id) => [
                     'company_id' => $company->id, 'branch_id' => $document->branch_id, 'location_id' => $location->id,
                     'product_id' => $id, 'opening_stock_id' => $document->id, 'created_at' => now(),
                 ], $productIds));
@@ -440,7 +491,7 @@ class OpeningStockService
                 throw InvalidDocumentStateException::make('lines', __('Opening stock for one of these products was posted at this location in the meantime.'));
             }
 
-            $products = Product::forCompany($company)->whereIn('id', $productIds)->get()->keyBy('id');
+            $products = Product::forCompany($company)->whereIn('id', $lines->pluck('product_id')->unique())->get()->keyBy('id');
             $units = ProductUnit::forCompany($company)->whereIn('id', $lines->pluck('product_unit_id'))->get()->keyBy('id');
 
             foreach ($lines as $line) {
@@ -454,7 +505,7 @@ class OpeningStockService
                 }
 
                 $this->ledger->post(new StockPosting(
-                    type: StockMovementType::OpeningStock,
+                    type: $line->line_type === 'additional' ? StockMovementType::StockIn : StockMovementType::OpeningStock,
                     location: $location,
                     product: $product,
                     quantityBase: (string) $line->quantity_base,
@@ -473,6 +524,20 @@ class OpeningStockService
                 }
             }
 
+            // Catalogue prices change ONLY when explicitly confirmed (and permitted).
+            $pricesChanged = 0;
+            if ($applyPrices) {
+                foreach ($lines->whereNotNull('proposed_selling_price') as $line) {
+                    $unit = $units[$line->product_unit_id];
+                    if (Decimal::cmp(app(PriceService::class)->resolve($products[$line->product_id], $unit)->price, (string) $line->proposed_selling_price) !== 0) {
+                        app(PriceService::class)->setPrice($products[$line->product_id], $unit, (string) $line->proposed_selling_price, null, $actor,
+                            notes: __('From opening stock :ref', ['ref' => $document->reference]));
+                        $pricesChanged++;
+                        $line->forceFill(['selling_price_applied_at' => now(), 'selling_price_applied_by' => $actor->id])->save();
+                    }
+                }
+            }
+
             $document->forceFill([
                 'status' => OpeningStockStatus::Posted,
                 'posted_by' => $actor->id,
@@ -482,7 +547,8 @@ class OpeningStockService
             ])->save();
             $document->recordEvent('posted', 'draft', 'posted', $actor, __(':lines lines, value :value', [
                 'lines' => $lines->count(), 'value' => Decimal::format($document->total_value),
-            ]).($zero ? ' · '.__('zero-cost lines approved: :reason', ['reason' => $document->zero_cost_reason]) : ''));
+            ]).($zero ? ' · '.__('zero-cost lines approved: :reason', ['reason' => $document->zero_cost_reason]) : '')
+              .($pricesChanged > 0 ? ' · '.__(':n catalogue selling prices updated', ['n' => $pricesChanged]) : ''));
 
             return $document;
         }, attempts: 3);

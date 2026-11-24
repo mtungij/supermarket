@@ -21,6 +21,7 @@ class OpeningStockLine extends Model
             'conversion_factor' => 'decimal:6', 'quantity' => 'decimal:4', 'quantity_base' => 'decimal:4',
             'unit_cost' => 'decimal:4', 'unit_cost_base' => 'decimal:4', 'line_value' => 'decimal:4',
             'zero_cost_confirmed' => 'boolean', 'manufactured_on' => 'date', 'expires_on' => 'date',
+            'proposed_selling_price' => 'decimal:2', 'selling_price_applied_at' => 'datetime', 'selling_price_applied_by' => 'integer',
         ];
     }
 

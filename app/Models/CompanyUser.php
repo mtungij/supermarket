@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SystemRole;
+use App\Models\Concerns\HasDocumentEvents;
 use App\Support\Tenancy\CompanyScope;
 use Database\Factories\CompanyUserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,7 +24,7 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
 class CompanyUser extends Pivot
 {
     /** @use HasFactory<CompanyUserFactory> */
-    use HasFactory;
+    use HasDocumentEvents, HasFactory;
 
     protected $table = 'company_user';
 

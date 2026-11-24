@@ -21,6 +21,7 @@ class PurchaseOrderLine extends Model
             'unit_cost' => 'decimal:4', 'discount_amount' => 'decimal:2', 'tax_rate' => 'decimal:2',
             'tax_amount' => 'decimal:2', 'line_subtotal' => 'decimal:2', 'line_total' => 'decimal:2',
             'received_quantity_base' => 'decimal:4',
+            'proposed_selling_price' => 'decimal:2', 'selling_price_applied_at' => 'datetime', 'selling_price_applied_by' => 'integer',
         ];
     }
 

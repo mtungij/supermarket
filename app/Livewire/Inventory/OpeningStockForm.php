@@ -2,14 +2,19 @@
 
 namespace App\Livewire\Inventory;
 
+use App\Enums\LocationType;
 use App\Livewire\Concerns\InteractsWithTenant;
+use App\Livewire\Concerns\PicksManyProducts;
 use App\Livewire\Concerns\PicksProducts;
 use App\Models\Branch;
 use App\Models\OpeningStock;
 use App\Models\OpeningStockLine;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\StockBalance;
 use App\Models\StockLocation;
+use App\Services\Catalogue\PricePrefill;
+use App\Services\Catalogue\PriceService;
 use App\Services\Inventory\OpeningStockService;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\Cache;
@@ -30,7 +35,7 @@ use Livewire\WithPagination;
 #[Layout('components.layouts.tenant')]
 class OpeningStockForm extends Component
 {
-    use InteractsWithTenant, PicksProducts, WithPagination;
+    use InteractsWithTenant, PicksManyProducts, PicksProducts, WithPagination;
 
     /** Above this many lines a draft is shown read-only (e.g. big imports). */
     public const EDITABLE_LINES = 300;
@@ -55,6 +60,9 @@ class OpeningStockForm extends Component
     public bool $confirmingPost = false;
 
     public bool $confirmingCancel = false;
+
+    /** Explicit choice in the post dialog: also change catalogue selling prices. */
+    public bool $applyPrices = false;
 
     /** Server-computed summary shown in the post confirmation. */
     #[Locked]
@@ -82,14 +90,25 @@ class OpeningStockForm extends Component
                     'quantity' => Decimal::trim($l->quantity), 'unit_cost' => Decimal::trim($l->unit_cost),
                     'zero_cost_confirmed' => $l->zero_cost_confirmed, 'batch_number' => (string) $l->batch_number,
                     'manufactured_on' => (string) $l->manufactured_on?->toDateString(), 'expires_on' => (string) $l->expires_on?->toDateString(),
+                    'proposed_selling_price' => $l->proposed_selling_price !== null ? Decimal::trim($l->proposed_selling_price) : '',
                 ])->all();
             }
         } else {
             $this->authorize('inventory.opening.manage');
             $this->branch = $this->currentBranch()->uuid;
             $this->openingDate = today($this->company()->timezone ?: config('saas.default_timezone'))->toDateString();
-            $this->location = (string) $this->locations()->firstWhere('is_sellable', true)?->uuid;
+            $this->location = $this->defaultLocationUuid();
         }
+    }
+
+    /** The branch's Sales Floor (by location TYPE), else a sellable location, else the first one. */
+    private function defaultLocationUuid(): string
+    {
+        $locations = $this->locations();
+
+        return (string) ($locations->firstWhere('type', LocationType::SalesFloor)?->uuid
+            ?? $locations->firstWhere('is_sellable', true)?->uuid
+            ?? $locations->first()?->uuid);
     }
 
     private function document(): ?OpeningStock
@@ -118,24 +137,43 @@ class OpeningStockForm extends Component
 
     public function updatedBranch(): void
     {
-        $this->location = (string) $this->locations()->firstWhere('is_sellable', true)?->uuid;
+        $this->location = $this->defaultLocationUuid();
     }
 
     // ---- lines -----------------------------------------------------------------
 
+    /** New lines come PREFILLED (editable): current/reference cost and the current selling price, per unit. */
     protected function newLine(Product $product, ProductUnit $unit): array
     {
-        return ['product_id' => $product->id, 'product_unit_id' => $unit->id, 'unit_cost' => '', 'zero_cost_confirmed' => false,
-            'batch_number' => '', 'manufactured_on' => '', 'expires_on' => ''];
+        $prefill = app(PricePrefill::class);
+
+        return ['product_id' => $product->id, 'product_unit_id' => $unit->id,
+            'unit_cost' => (string) $prefill->buyingCost($product, $unit, $this->branchModel())[0], 'zero_cost_confirmed' => false,
+            'batch_number' => '', 'manufactured_on' => '', 'expires_on' => '',
+            'proposed_selling_price' => (string) $prefill->sellingPrice($product, $unit, $this->branchModel())];
     }
 
-    /** Refuse products that already have activity / an opening balance here (same rule as posting). */
-    protected function canAdd(Product $product, ProductUnit $unit, string $quantity): ?string
+    protected function pickerDefaultUnit(Product $product): ?ProductUnit
+    {
+        return ProductUnit::query()->where('product_id', $product->id)->where('is_active', true)->where('is_base', true)->first();
+    }
+
+    /** "In stock" in the picker = what the chosen location holds now. */
+    protected function pickerStockScope(): ?array
     {
         $location = $this->locationModel();
-        $reason = $location ? (app(OpeningStockService::class)->ineligibility($location, [$product->id])[$product->id] ?? null) : null;
 
-        return $reason ? $product->name.' '.$reason : null;
+        return $location ? ['location', $location->id] : null;
+    }
+
+    /**
+     * Every active product can be selected. Products already opened here or
+     * already trading in the branch are entered as "Additional stock in"
+     * (decided again by OpeningStockService on save/post), never refused.
+     */
+    protected function canAdd(Product $product, ProductUnit $unit, string $quantity): ?string
+    {
+        return null;
     }
 
     /**
@@ -184,6 +222,18 @@ class OpeningStockForm extends Component
      */
     public function updated(string $property): void
     {
+        // a different unit -> that unit's suggested cost and selling price
+        if (preg_match('/^lines\.(\d+)\.product_unit_id$/', $property, $u) && isset($this->lines[(int) $u[1]])) {
+            $line = $this->lines[(int) $u[1]];
+            $product = Product::query()->find($line['product_id']);
+            $unit = ProductUnit::query()->where('product_id', $line['product_id'])->find($line['product_unit_id']);
+            if ($product && $unit) {
+                $prefill = app(PricePrefill::class);
+                $this->lines[(int) $u[1]]['unit_cost'] = (string) $prefill->buyingCost($product, $unit, $this->branchModel())[0];
+                $this->lines[(int) $u[1]]['proposed_selling_price'] = (string) $prefill->sellingPrice($product, $unit, $this->branchModel());
+            }
+        }
+
         if (preg_match('/^lines\.(\d+)\./', $property, $m)) {
             $this->forgetErrors("lines.{$m[1]}.");
             $this->resetErrorBag(['lines', 'status', 'document']);
@@ -259,6 +309,7 @@ class OpeningStockForm extends Component
                 'product_id' => $l->product_id, 'product_unit_id' => $l->product_unit_id, 'quantity' => (string) $l->quantity,
                 'unit_cost' => (string) $l->unit_cost, 'zero_cost_confirmed' => $l->zero_cost_confirmed, 'batch_number' => $l->batch_number,
                 'manufactured_on' => $l->manufactured_on?->toDateString(), 'expires_on' => $l->expires_on?->toDateString(),
+                'proposed_selling_price' => $l->proposed_selling_price !== null ? (string) $l->proposed_selling_price : null,
             ])->all();
         }
 
@@ -312,6 +363,7 @@ class OpeningStockForm extends Component
             $this->rethrow($e);
         }
 
+        $this->applyPrices = false;                 // never pre-ticked
         $this->postKey = (string) Str::uuid();
         $this->confirmingPost = true;
     }
@@ -340,7 +392,12 @@ class OpeningStockForm extends Component
                     $this->js('history.replaceState(null, "", '.json_encode(route('inventory.opening-stock.show', $document)).')');
                 }
             }
-            $document = $service->post($document, $this->actor());
+            // What is posted must match what the dialog showed (opening vs additional).
+            $additionalNow = OpeningStockLine::query()->where('opening_stock_id', $document->id)->where('line_type', 'additional')->count();
+            if ($this->confirmation !== null && $additionalNow !== (int) ($this->confirmation['additional_lines'] ?? 0)) {
+                throw ValidationException::withMessages(['lines' => __('Stock changed since you opened this confirmation: :n lines are now Additional stock in. Nothing was posted; check the lines and post again.', ['n' => $additionalNow])]);
+            }
+            $document = $service->post($document, $this->actor(), $this->applyPrices);
         } catch (ValidationException $e) {
             $this->postKey = '';           // allow a corrected retry via "Post" again
             $this->rethrow($e);
@@ -370,20 +427,40 @@ class OpeningStockForm extends Component
         $document = $this->document();
         $editable = ($document === null || ($document->isDraft() && $document->line_count <= self::EDITABLE_LINES)) && auth()->user()->can('inventory.opening.manage');
 
-        $products = Product::query()->whereIn('id', array_column($this->lines, 'product_id'))->with('baseUnit:id,name')->get()->keyBy('id');
+        $products = Product::query()->whereIn('id', array_column($this->lines, 'product_id'))->with(['baseUnit:id,name', 'barcodes' => fn ($b) => $b->orderByDesc('is_primary')])->get()->keyBy('id');
         $units = ProductUnit::query()->whereIn('id', array_column($this->lines, 'product_unit_id'))->with('unit:id,name')->get()->keyBy('id');
 
-        // live totals (display only; the service recomputes on save/post)
+        // live totals + read-only reference data (display only; the service recomputes on save/post)
+        $location = $this->locationModel();
+        $ids = array_column($this->lines, 'product_id');
+        $stockHere = $location ? StockBalance::query()->where('location_id', $location->id)->whereIn('product_id', $ids)->groupBy('product_id')
+            ->selectRaw('product_id, sum(quantity) as qty')->pluck('qty', 'product_id') : collect();
+        $priceService = app(PriceService::class);
+        $prefill = app(PricePrefill::class);
+        // which lines are "Additional stock in" (product already opened here / trading in the branch)
+        $blocked = $location ? app(OpeningStockService::class)->ineligibility($location, array_values(array_unique($ids))) : [];
         $rows = [];
         $totalQty = '0';
         $totalValue = '0';
         foreach ($this->lines as $i => $l) {
+            $p = $products[$l['product_id']] ?? null;
+            $u = $units[$l['product_unit_id']] ?? null;
+            $info = [
+                'stock' => Decimal::trim(Decimal::round((string) ($stockHere[$l['product_id']] ?? '0'), Decimal::QTY)),
+                'buying' => $p && $u ? $prefill->buyingCost($p, $u, $this->branchModel())[0] : null,
+                'buying_source' => $p && $u ? $prefill->buyingCost($p, $u, $this->branchModel())[1] : 'none',
+                'selling' => $p && $u && $u->can_sell ? $priceService->resolve($p, $u, $this->branchModel())->price : null,
+                'sellable' => (bool) $u?->can_sell,
+                'type' => isset($blocked[$l['product_id']]) ? 'additional' : 'opening',
+                'type_reason' => $blocked[$l['product_id']] ?? null,
+                'unit_name' => $u ? __($u->unit?->name ?? '') : '',
+            ];
             $unit = $units[$l['product_unit_id']] ?? null;
             $qty = Decimal::isValid(str_replace(',', '', (string) $l['quantity'])) ? str_replace(',', '', (string) $l['quantity']) : '0';
             $cost = Decimal::isValid(str_replace(',', '', (string) $l['unit_cost'])) ? str_replace(',', '', (string) $l['unit_cost']) : null;
             $qtyBase = $unit ? Decimal::mul($qty, (string) $unit->factor) : '0';
             $value = $cost !== null && $unit ? Decimal::round(Decimal::mul($qtyBase, Decimal::round(Decimal::div($cost, (string) $unit->factor), Decimal::COST)), Decimal::COST) : null;
-            $rows[$i] = ['qty_base' => $qtyBase, 'value' => $value, 'zero' => $cost !== null && ! Decimal::isPositive($cost)];
+            $rows[$i] = ['qty_base' => $qtyBase, 'value' => $value, 'zero' => $cost !== null && ! Decimal::isPositive($cost)] + $info;
             $totalQty = Decimal::add($totalQty, $qtyBase);
             $totalValue = $value !== null ? Decimal::add($totalValue, $value) : $totalValue;
         }
@@ -400,6 +477,7 @@ class OpeningStockForm extends Component
             'summary' => ['products' => collect($this->lines)->pluck('product_id')->unique()->count(), 'quantity' => $totalQty, 'value' => $totalValue],
             'anyZero' => collect($rows)->contains('zero', true),
             'results' => $editable ? $this->productResults() : collect(),
+            'picker' => $editable ? $this->pickerResults() : ['rows' => collect(), 'more' => false, 'stock' => [], 'inList' => [], 'showStock' => false],
             'currency' => $this->company()->currency,
             'can' => [
                 'manage' => auth()->user()->can('inventory.opening.manage'),

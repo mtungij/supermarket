@@ -163,7 +163,7 @@ class OpeningStockTest extends TestCase
         $this->assertSame('16.0000', $this->onHandAt($juice));
     }
 
-    public function test_cost_must_be_entered_and_reference_price_is_never_used_silently(): void
+    public function test_cost_is_validated_and_prefilled_visibly_in_the_form(): void
     {
         $soap = $this->makeProduct($this->company, $this->owner, ['name' => 'SOAP', 'reference_buying_price' => '450']);
 
@@ -177,11 +177,15 @@ class OpeningStockTest extends TestCase
         }
         $this->assertSame(0, OpeningStock::forCompany($this->company)->count());
 
-        // the form only suggests it; "Use it" copies it visibly into the field
+        // the form PREFILLS an editable cost: last purchase cost, else the reference buying price
         $form = Livewire::test(OpeningStockForm::class)->call('pickProduct', $soap->id);
-        $this->assertSame('', $form->get('lines')[0]['unit_cost']);
-        $form->assertSee('Reference buying price: 450.00')->call('useReferenceCost', 0);
-        $this->assertSame('450', $form->get('lines')[0]['unit_cost']);
+        $this->assertSame('1000', $form->get('lines')[0]['unit_cost']);                         // purchase_cost of the test product
+        $form->assertSee('Suggested: last purchase cost');
+        $refOnly = $this->makeProduct($this->company, $this->owner, ['name' => 'REF ONLY', 'purchase_cost' => '0', 'reference_buying_price' => '450']);
+        $none = $this->makeProduct($this->company, $this->owner, ['name' => 'NO COST', 'purchase_cost' => '0']);
+        $form->call('pickProduct', $refOnly->id)->call('pickProduct', $none->id)->assertSee('Suggested: reference buying price');
+        $this->assertSame(['1000', '450', ''], array_column($form->get('lines'), 'unit_cost'));
+        $form->set('lines.0.unit_cost', '980')->call('saveDraft')->assertHasErrors('lines.2.unit_cost');   // no cost -> blank and required
     }
 
     public function test_zero_cost_needs_confirmation_reason_and_elevated_permission(): void
@@ -252,32 +256,57 @@ class OpeningStockTest extends TestCase
 
     // ---- duplicate / eligibility ---------------------------------------------------
 
-    public function test_products_with_activity_or_an_existing_opening_balance_cannot_be_reinitialised(): void
+    public function test_existing_products_become_additional_stock_in_never_a_second_opening_balance(): void
     {
-        $sold = $this->makeProduct($this->company, $this->owner, ['name' => 'ALREADY TRADING']);
-        $this->stock($this->company, $this->owner, $sold, '10');                                   // a real GRN
-        $this->assertThrowsMessage(fn () => $this->draft([$this->line($sold, '5', '100')]), 'Use Stock Adjustments');
-        // ...in any location of that branch
-        $this->assertThrowsMessage(fn () => $this->draft([$this->line($sold, '5', '100')], LocationType::MainStore), 'already has stock activity');
+        $types = fn (Product $p) => StockMovement::forCompany($this->company)->where('product_id', $p->id)->orderBy('id')->pluck('type')->map->value->all();
 
+        // already trading (a real GRN of 10): selectable, entered as Additional stock in, ADDED to what is there
+        $sold = $this->makeProduct($this->company, $this->owner, ['name' => 'ALREADY TRADING']);
+        $this->stock($this->company, $this->owner, $sold, '10');
+        $doc = $this->draft([$this->line($sold, '5', '100')]);
+        $this->assertSame('additional', $doc->lines()->sole()->line_type);
+        $this->service()->post($doc, $this->owner);
+        $this->assertSame('15.0000', $this->onHandAt($sold));                                     // 10 + 5, nothing replaced
+        $this->assertSame(['goods_receipt', 'stock_in'], $types($sold));
+        $this->assertSame(0, OpeningStockRegistration::forCompany($this->company)->where('product_id', $sold->id)->count());
+
+        // first opening at a location; a second document for the same product + location
         $fresh = $this->makeProduct($this->company, $this->owner, ['name' => 'FRESH']);
         $first = $this->draft([$this->line($fresh, '5', '100')]);
-        $second = $this->draft([$this->line($fresh, '7', '100')]);                                 // drafts may overlap
+        $second = $this->draft([$this->line($fresh, '7', '100')]);                                 // both 'opening' while drafts
         $this->service()->post($first, $this->owner);
-        $this->assertThrowsMessage(fn () => $this->service()->post($second, $this->owner), 'already has opening stock at Sales Floor');
+        // posting the second as OPENING is refused (it would be a second opening balance)...
+        $this->assertThrowsMessage(fn () => $this->service()->post($second, $this->owner), 'it will be entered as Additional stock in');
         $this->assertSame('5.0000', $this->onHandAt($fresh));
-        $this->assertSame('draft', $second->fresh()->status->value);
+        // another location of the same branch is still first-time stock while there is only opening activity
+        $this->assertSame('opening', $this->draft([$this->line($fresh, '2', '100')], LocationType::MainStore)->lines()->sole()->line_type);
+        // ...saving it again routes it to Additional stock in, which then adds 7
+        $second = $this->service()->saveDraft($this->company, $second, ['branch_id' => $this->hq->id, 'location_id' => $this->loc()->id,
+            'opening_date' => today()->toDateString()], [$this->line($fresh, '7', '100')], $this->owner);
+        $this->assertSame('additional', $second->lines()->sole()->line_type);
+        $this->service()->post($second, $this->owner);
+        $this->assertSame('12.0000', $this->onHandAt($fresh));
+        $this->assertSame(['opening_stock', 'stock_in'], $types($fresh));
+        $this->assertSame(1, OpeningStockRegistration::forCompany($this->company)->where('product_id', $fresh->id)->count());
 
-        // once trading starts (a sale), even another location is closed
+        // once anything else has happened in the branch (here: that stock-in, then a sale) it is additional stock everywhere there
         $device = $this->device($this->hq);
         $this->sell($this->company, $this->owner, $device, [['product_id' => $fresh->id, 'product_unit_id' => $this->baseUnitOf($fresh)->id, 'quantity' => '1']],
             [['payment_method_id' => $this->method($this->company)->id, 'amount' => '5000']]);
-        $this->assertThrowsMessage(fn () => $this->draft([$this->line($fresh, '3', '100')], LocationType::MainStore), 'already has stock activity');
+        $this->assertSame('additional', $this->draft([$this->line($fresh, '3', '100')], LocationType::MainStore)->lines()->sole()->line_type);
 
-        // the form refuses them at scan/pick time with the same explanation
-        Livewire::test(OpeningStockForm::class)->call('pickProduct', $sold->id)->assertHasErrors('productSearch')->assertSet('lines', []);
+        // another BRANCH has its own initial stock
+        $mbezi = app(BranchService::class)->create($this->company, ['name' => 'Mbezi']);
+        $other = $this->service()->saveDraft($this->company, null, ['branch_id' => $mbezi->id,
+            'location_id' => StockLocation::forCompany($this->company)->where('branch_id', $mbezi->id)->where('type', 'sales_floor')->value('id'),
+            'opening_date' => today()->toDateString()], [$this->line($sold, '4', '100')], $this->owner);
+        $this->assertSame('opening', $other->lines()->sole()->line_type);
 
-        // the database guard holds even if the eligibility check were bypassed
+        // the form accepts such products and labels them
+        Livewire::test(OpeningStockForm::class)->call('pickProduct', $sold->id)->assertHasNoErrors('productSearch')
+            ->assertSee('Additional stock in')->assertSee('Added on top of the existing stock');
+
+        // the database guard still holds even if the eligibility check were bypassed
         $this->expectException(UniqueConstraintViolationException::class);
         OpeningStockRegistration::query()->insert(['company_id' => $this->company->id, 'branch_id' => $this->hq->id,
             'location_id' => $this->loc()->id, 'product_id' => $fresh->id, 'opening_stock_id' => $first->id, 'created_at' => now()]);
@@ -435,16 +464,16 @@ class OpeningStockTest extends TestCase
             .",6203013430060,10,500,\n"            // ok
             .",6203013430060,3,500,\n"             // duplicate of row 2
             ."NOPE,,1,1,\n"                         // unknown SKU
-            ."{$traded->sku},,1,1,\n"              // already trading
+            ."{$traded->sku},,1,1,\n"              // already trading -> valid, as Additional stock in
             .",6203013430060,-1,500,\n"            // negative
             .",6203013430060,1,,\n"                // missing cost
             .",6203013430060,1,500,31/02/2026\n"); // invalid date
         $import = Livewire::test(OpeningStockImport::class)->set('file', $file)->call('analyse');
         $errors = $import->get('result')['errors'];
-        $this->assertSame([3, 4, 5, 6, 7, 8], array_keys($errors));
+        $this->assertSame([3, 4, 6, 7, 8], array_keys($errors));
         $this->assertStringContainsString('listed twice', $errors[3][0]);
         $this->assertStringContainsString('NOPE', $errors[4][0]);
-        $this->assertStringContainsString('Stock Adjustments', $errors[5][0]);
+        $this->assertSame('additional', collect($import->get('result')['preview'])->firstWhere('row', 5)['type']);
 
         $import->call('createDraft')->assertHasErrors('file');
         $this->assertSame(0, OpeningStock::forCompany($this->company)->count());

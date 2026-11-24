@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Purchasing;
 
+use App\Enums\LocationType;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\BusinessRuleException;
 use App\Livewire\Concerns\InteractsWithTenant;
@@ -22,8 +23,9 @@ use Livewire\Component;
  * Receive Purchase (HARDEX-style).
  *
  * - "Receive All" fills every line with its outstanding quantity.
- * - A default receiving location applies to all lines; each line can
- *   override it with another active location of the order's branch.
+ * - A default receiving location (the branch's Sales Floor) applies to all
+ *   lines; each line can override it with another active location of the
+ *   order's branch.
  * - Additional (landed) costs are allocated over received base
  *   quantities; the summary recalculates live with the same rules
  *   (ReceiptCalculator) that posting uses.
@@ -71,8 +73,13 @@ class GoodsReceiptForm extends Component
         $this->orderUuid = $order->uuid;
         $this->submissionKey = (string) Str::uuid();
         $this->receivedDate = today($this->company()->timezone)->toDateString();
-        $this->defaultLocation = (string) StockLocation::query()->where('branch_id', $order->branch_id)
-            ->where('type', 'receiving_area')->where('is_active', true)->value('uuid');
+        // Default destination: the order's branch Sales Floor (by location TYPE), then any
+        // sellable location, then the Receiving Area. Users may pick another location.
+        $locations = StockLocation::query()->where('branch_id', $order->branch_id)->where('is_active', true)->get(['uuid', 'type', 'is_sellable']);
+        $this->defaultLocation = (string) ($locations->firstWhere('type', LocationType::SalesFloor)?->uuid
+            ?? $locations->firstWhere('is_sellable', true)?->uuid
+            ?? $locations->firstWhere('type', LocationType::ReceivingArea)?->uuid
+            ?? $locations->first()?->uuid);
 
         $this->lines = $order->lines()->with(['product.baseUnit', 'productUnit.unit'])->orderBy('id')->get()
             ->filter(fn ($l) => Decimal::isPositive($l->remainingBase()))

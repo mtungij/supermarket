@@ -6,7 +6,9 @@ use App\Enums\PurchaseOrderStatus;
 use App\Livewire\Concerns\InteractsWithTenant;
 use App\Models\GoodsReceipt;
 use App\Models\PurchaseOrder;
+use App\Services\Catalogue\PriceService;
 use App\Services\Purchasing\PurchaseOrderService;
+use App\Support\Decimal;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -21,6 +23,8 @@ class PurchaseOrderShow extends Component
     public string $orderUuid;
 
     public string $reason = '';
+
+    public bool $confirmingPrices = false;
 
     public function mount(PurchaseOrder $order): void
     {
@@ -60,13 +64,34 @@ class PurchaseOrderShow extends Component
         session()->flash('status', __('Purchase order updated.'));
     }
 
+    /**
+     * Explicit, authorised workflow: apply the selling prices PROPOSED on
+     * this order's lines to the catalogue (price history via PriceService).
+     */
+    public function applyPrices(PurchaseOrderService $orders): void
+    {
+        $this->authorize('products.prices.manage');
+        $changed = $orders->applyProposedPrices($this->order(), $this->actor());
+        $this->confirmingPrices = false;
+        session()->flash('status', trans_choice(':count selling price updated.|:count selling prices updated.', $changed));
+    }
+
     public function render(): View
     {
         $order = $this->order()->load(['supplier', 'branch', 'creator:id,name', 'approver:id,name', 'lines.product.baseUnit', 'lines.productUnit.unit']);
         $user = auth()->user();
 
+        $prices = app(PriceService::class);
+        // only REAL changes (or ones already applied); an unchanged prefilled price is no proposal
+        $proposals = $order->lines->whereNotNull('proposed_selling_price')->map(fn ($l) => [
+            'line' => $l, 'current' => $prices->resolve($l->product, $l->productUnit)->price,
+        ])->filter(fn ($p) => $p['line']->selling_price_applied_at !== null || Decimal::cmp($p['current'], (string) $p['line']->proposed_selling_price) !== 0)->values();
+
         return view('livewire.purchasing.purchase-order-show', [
             'order' => $order,
+            'proposals' => $proposals,
+            'pendingProposals' => $proposals->filter(fn ($p) => $p['line']->selling_price_applied_at === null
+                && Decimal::cmp($p['current'], (string) $p['line']->proposed_selling_price) !== 0)->count(),
             'receipts' => GoodsReceipt::query()->where('purchase_order_id', $order->id)->with('poster:id,name')->latest('id')->get(),
             'events' => $order->events()->with('user:id,name')->get(),
             'can' => [
@@ -78,6 +103,7 @@ class PurchaseOrderShow extends Component
                 'quick' => ! $order->status->canReceive() && $user->can('purchases.quick_receive'),
                 'cancel' => $order->status->canTransitionTo(PurchaseOrderStatus::Cancelled) && ($user->can('purchases.approve') || ($order->status->isEditable() && $user->can('purchases.create'))),
                 'close' => $order->status === PurchaseOrderStatus::PartiallyReceived && $user->can('purchases.approve'),
+                'prices' => $user->can('products.prices.manage') && $order->status !== PurchaseOrderStatus::Cancelled,
             ],
         ])->title($order->reference);
     }

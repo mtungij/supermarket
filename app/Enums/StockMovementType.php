@@ -20,10 +20,12 @@ enum StockMovementType: string
     case SaleReturn = 'sale_return';
     /** Initial physical stock that existed before the shop used the system (inbound at the confirmed opening cost). */
     case OpeningStock = 'opening_stock';
+    /** "Additional stock in": counted stock added on top of an existing balance (not initial opening stock). */
+    case StockIn = 'stock_in';
 
     public function isInbound(): bool
     {
-        return in_array($this, [self::GoodsReceipt, self::AdjustmentIn, self::TransferIn, self::SaleReturn, self::OpeningStock], true);
+        return in_array($this, [self::GoodsReceipt, self::AdjustmentIn, self::TransferIn, self::SaleReturn, self::OpeningStock, self::StockIn], true);
     }
 
     public function label(): string
@@ -37,6 +39,7 @@ enum StockMovementType: string
             self::Sale => 'Sale',
             self::SaleReturn => 'Sale return',
             self::OpeningStock => 'Opening stock',
+            self::StockIn => 'Additional stock in',
         };
     }
 }

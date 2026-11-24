@@ -82,7 +82,7 @@ class OpeningStockConfirmationTest extends TestCase
         // no lines
         Livewire::test(OpeningStockForm::class)->call('confirmPost')->assertHasErrors('lines')->assertSet('confirmingPost', false);
         // missing cost
-        $this->form()->call('confirmPost')->assertHasErrors('lines.0.unit_cost')->assertSet('confirmingPost', false);
+        $this->form()->set('lines.0.unit_cost', '')->call('confirmPost')->assertHasErrors('lines.0.unit_cost')->assertSet('confirmingPost', false);
         // zero cost not confirmed / zero quantity / no location
         $this->form()->set('lines.0.unit_cost', '0')->call('confirmPost')->assertHasErrors('lines.0.unit_cost')->assertSet('confirmingPost', false);
         $this->form()->set('lines.0.quantity', '0')->set('lines.0.unit_cost', '5')->call('confirmPost')->assertHasErrors('lines.0.quantity');
@@ -93,13 +93,15 @@ class OpeningStockConfirmationTest extends TestCase
         // eligibility: product already trading
         $this->actingAsTenant($this->owner, $this->company);
         $this->stock($this->company, $this->owner, $this->drs, '3');
-        Livewire::test(OpeningStockForm::class)->set('scan', '6203013430060')->call('scanBarcode')->assertHasErrors('scan')->assertSet('lines', [])
-            ->call('confirmPost')->assertHasErrors('lines')->assertSet('confirmingPost', false);
+        // ...is no longer refused: it is entered as Additional stock in (shown in the dialog)
+        $traded = Livewire::test(OpeningStockForm::class)->set('scan', '6203013430060')->call('scanBarcode')->assertHasNoErrors('scan')
+            ->assertSee('Additional stock in')->call('confirmPost')->assertHasNoErrors()->assertSet('confirmingPost', true);
+        $this->assertSame(1, $traded->get('confirmation')['additional_lines']);
     }
 
     public function test_cost_error_clears_once_a_valid_cost_is_entered(): void
     {
-        $form = $this->form()->call('confirmPost')->assertHasErrors('lines.0.unit_cost')
+        $form = $this->form()->set('lines.0.unit_cost', '')->call('confirmPost')->assertHasErrors('lines.0.unit_cost')
             ->assertSee('Enter the cost of DRS MEDICATED');
 
         $form->set('lines.0.unit_cost', '500')->assertHasNoErrors('lines.0.unit_cost')->assertDontSee('Enter the cost of DRS MEDICATED');
@@ -107,7 +109,7 @@ class OpeningStockConfirmationTest extends TestCase
 
         // removing a line clears line errors (indices shift)
         $p2 = $this->makeProduct($this->company, $this->owner, ['name' => 'SECOND']);
-        $form->set('confirmingPost', false)->call('pickProduct', $p2->id)->call('confirmPost')->assertHasErrors('lines.1.unit_cost')
+        $form->set('confirmingPost', false)->call('pickProduct', $p2->id)->set('lines.1.unit_cost', '')->call('confirmPost')->assertHasErrors('lines.1.unit_cost')
             ->call('removeLine', 0)->assertHasNoErrors('lines.1.unit_cost');
     }
 
@@ -141,14 +143,18 @@ class OpeningStockConfirmationTest extends TestCase
         $before = $this->movements();
 
         $form->call('post')->assertHasErrors()->assertSet('confirmingPost', true)
-            ->assertSee('Nothing was posted.')->assertSee('already has stock activity');
+            ->assertSee('Nothing was posted.')->assertSee('now Additional stock in');
         $this->assertSame($before, $this->movements());
-        $this->assertSame(0, OpeningStock::forCompany($this->company)->count());   // server re-check failed before anything was saved
+        $draft = OpeningStock::forCompany($this->company)->sole();
+        $this->assertSame(['draft', 'additional'], [$draft->status->value, $draft->lines()->sole()->line_type]);
 
-        // the same Confirm click cannot be replayed; a fresh check is required (and fails again with the reason)
-        $form->call('post')->assertSet('confirmingPost', true);
+        // the same Confirm click cannot be replayed; a fresh check shows the new classification and posts it as stock_in
+        $form->call('post');
         $this->assertSame($before, $this->movements());
-        $form->call('confirmPost')->assertHasErrors('lines.0.product_id')->assertSet('confirmingPost', false);
+        $form->call('confirmPost')->assertHasNoErrors()->assertSet('confirmingPost', true)->assertSee('Additional stock in');
+        $this->assertSame(1, $form->get('confirmation')['additional_lines']);
+        $form->call('post')->assertHasNoErrors();
+        $this->assertSame('stock_in', StockMovement::forCompany($this->company)->latest('id')->value('type')->value);
     }
 
     public function test_permissions_on_the_confirmation_step(): void

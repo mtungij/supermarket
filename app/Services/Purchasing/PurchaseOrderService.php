@@ -13,6 +13,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderLine;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Services\Catalogue\PriceService;
 use App\Services\Catalogue\UnitConversionService;
 use App\Services\Support\Authorizer;
 use App\Services\Support\DocumentNumberGenerator;
@@ -37,6 +38,7 @@ class PurchaseOrderService
         private readonly UnitConversionService $conversions,
         private readonly SubscriptionGuard $subscription,
         private readonly Authorizer $authorizer,
+        private readonly PriceService $prices,
     ) {}
 
     /**
@@ -303,6 +305,7 @@ class PurchaseOrderService
                 throw BusinessRuleException::make("{$field}.tax_rate", __('The tax rate cannot exceed 100%.'));
             }
 
+            $proposed = $this->proposedPrice($line['proposed_selling_price'] ?? null, $unit, "{$field}.proposed_selling_price");
             $subtotal = Decimal::round(Decimal::mul($quantity, $unitCost), Decimal::MONEY);
 
             if (Decimal::cmp($discount, $subtotal) > 0) {
@@ -329,6 +332,7 @@ class PurchaseOrderService
                 'line_subtotal' => $subtotal,
                 'line_total' => $lineTotal,
                 'received_quantity_base' => '0',
+                'proposed_selling_price' => $proposed,
             ])->save();
 
             $totals['subtotal'] = Decimal::add($totals['subtotal'], $subtotal, Decimal::MONEY);
@@ -338,6 +342,61 @@ class PurchaseOrderService
         }
 
         $order->forceFill($totals)->save();
+    }
+
+    /** Optional proposed selling price (per the line's unit); only recorded here, never applied. */
+    private function proposedPrice(mixed $value, ProductUnit $unit, string $field): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+        $price = $this->decimal($value, Decimal::MONEY, $field);
+        if (! Decimal::isPositive($price)) {
+            throw BusinessRuleException::make($field, __('The new selling price must be more than zero.'));
+        }
+        if (! $unit->can_sell) {
+            throw BusinessRuleException::make($field, __('This unit is not sold, so it has no selling price.'));
+        }
+
+        return $price;
+    }
+
+    /**
+     * Explicit, authorised update of catalogue selling prices from the
+     * prices PROPOSED on this order's lines. A separate action: creating,
+     * sending or receiving a purchase never changes prices. Each change goes
+     * through PriceService (effective-dated history, products.prices.manage)
+     * and is recorded on the line. Unchanged prices are skipped.
+     *
+     * @return int number of prices changed
+     */
+    public function applyProposedPrices(PurchaseOrder $order, User $actor): int
+    {
+        $this->authorizer->permission($actor, 'products.prices.manage');
+        $this->authorizer->branch($actor, $order->branch_id);
+
+        return DB::transaction(function () use ($order, $actor) {
+            $order = PurchaseOrder::forCompany($order->company_id)->lockForUpdate()->findOrFail($order->id);
+            if ($order->status === PurchaseOrderStatus::Cancelled) {
+                throw InvalidDocumentStateException::make('status', __('This purchase order is cancelled.'));
+            }
+            $changed = 0;
+            $lines = PurchaseOrderLine::forCompany($order->company_id)->where('purchase_order_id', $order->id)
+                ->whereNotNull('proposed_selling_price')->whereNull('selling_price_applied_at')->orderBy('id')->get();
+
+            foreach ($lines as $line) {
+                $product = Product::forCompany($order->company_id)->findOrFail($line->product_id);
+                $unit = ProductUnit::forCompany($order->company_id)->where('product_id', $product->id)->findOrFail($line->product_unit_id);
+                if (Decimal::cmp($this->prices->resolve($product, $unit)->price, (string) $line->proposed_selling_price) !== 0) {
+                    $this->prices->setPrice($product, $unit, (string) $line->proposed_selling_price, null, $actor,
+                        notes: __('From purchase order :ref', ['ref' => $order->reference]));
+                    $changed++;
+                    $line->forceFill(['selling_price_applied_at' => now(), 'selling_price_applied_by' => $actor->id])->save();
+                }
+            }
+
+            return $changed;
+        });
     }
 
     private function decimal(mixed $value, int $scale, string $field): string
